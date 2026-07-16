@@ -1,0 +1,203 @@
+======================================================
+ Common Utilities Explanation
+======================================================
+
+This file explains why the following files exist under src/common/:
+
+  1. decorators/current-user.decorator.ts
+  2. decorators/required-permission.decorator.ts
+  3. helpers/response.helper.ts
+
+
+------------------------------------------------------
+1. CurrentUser Decorator
+   src/common/decorators/current-user.decorator.ts
+------------------------------------------------------
+
+WHAT:
+  A custom NestJS parameter decorator that extracts the
+  authenticated user from the incoming request object.
+
+WHY:
+  After JwtStrategy validates the JWT cookie, NestJS puts
+  the decoded user payload (sub, email) onto request.user.
+  Without this decorator, every controller method that
+  needs the current user would have to write this manually:
+
+    const request = context.switchToHttp().getRequest();
+    const user = request.user;
+
+  That is repetitive and noisy. This decorator lets you
+  simply write:
+
+    @CurrentUser('sub') userId: string
+
+  or:
+
+    @CurrentUser() user: { sub: string; email: string }
+
+HOW IT WORKS:
+  - createParamDecorator() defines a reusable parameter
+    decorator for NestJS route handlers.
+  - When called with an argument like 'sub', it returns
+    just that property (user.sub).
+  - When called with no argument, it returns the entire
+    user object.
+
+USAGE EXAMPLES:
+
+  @Get('me')
+  getProfile(@CurrentUser() user: { sub: string; email: string }) {
+    // user = { sub: "abc-123", email: "a@b.com" }
+  }
+
+  @Post('upload')
+  uploadAvatar(@CurrentUser('sub') userId: string) {
+    // userId = "abc-123"
+  }
+
+
+------------------------------------------------------
+2. RequiredPermission Decorator
+   src/common/decorators/required-permission.decorator.ts
+------------------------------------------------------
+
+WHAT:
+  A metadata decorator that tells the RolesGuard which
+  permission is required to access a specific route.
+
+WHY:
+  The RolesGuard (src/common/guards/roles.guard.ts) runs
+  on every non-public request. It needs to decide whether
+  the current user has permission to access the route.
+
+  By default, RolesGuard guesses the permission from the
+  HTTP method + URL path. For example:
+    GET  /users  --> "read:user"
+    POST /roles  --> "create:role"
+
+  This works for simple CRUD routes, but sometimes the
+  URL path does not clearly map to a permission name, or
+  you want to override the default. That is when you use
+  this decorator.
+
+HOW IT WORKS:
+  - It stores a string value (the permission name) as
+    metadata on the route handler using SetMetadata().
+  - When RolesGuard runs, it checks if this metadata
+    exists via reflector.get(REQUIRED_PERMISSION_KEY, handler).
+  - If the metadata exists, it uses that exact permission
+    string instead of the auto-detected one.
+  - If it does not exist, the guard falls back to the
+    auto-detected permission.
+
+USAGE EXAMPLES:
+
+  // Default behavior - permission auto-detected from
+  // HTTP method + path:
+  @Get('dashboard')
+  getDashboard() { ... }
+  // Guard checks: "read:dashboard"
+
+  // Override with a specific permission:
+  @RequiredPermission('export:report')
+  @Post('export')
+  exportReport() { ... }
+  // Guard checks: "export:report" (not "create:export")
+
+
+------------------------------------------------------
+3. Response Helper
+   src/common/helpers/response.helper.ts
+------------------------------------------------------
+
+WHAT:
+  A set of small functions that create standard API
+  response objects with a consistent shape.
+
+WHY:
+  Without these helpers, every service method would need
+  to manually construct the response object:
+
+    return { statusCode: 200, success: true, message: 'OK', data: result };
+
+  This leads to:
+  - Typos and inconsistency across endpoints
+  - Easy to forget a field (e.g. missing "success")
+  - Different developers using different field names
+
+  These helpers enforce ONE consistent response format
+  across the entire API.
+
+THE RESPONSE FORMAT:
+
+  {
+    "statusCode": 200,      // HTTP status code
+    "success": true,        // always true for success
+    "message": "...",       // human-readable description
+    "data": { ... }         // optional payload
+  }
+
+AVAILABLE FUNCTIONS:
+
+  responseOk(message, data?)
+    Returns status 200. Use for successful reads and updates.
+
+  responseCreated(message, data?)
+    Returns status 201. Use for successful resource creation.
+
+  responseNoContent(message)
+    Returns status 204. Use for successful deletes with no
+    body to return.
+
+USAGE EXAMPLES:
+
+  // In a service:
+  async findAll() {
+    const users = await this.prisma.user.findMany();
+    return responseOk('Users fetched successfully', users);
+  }
+
+  async create(dto: CreateUserDto) {
+    const user = await this.prisma.user.create({ data: dto });
+    return responseCreated('User created successfully', user);
+  }
+
+  async remove(id: string) {
+    await this.prisma.user.delete({ where: { id } });
+    return responseNoContent('User deleted successfully');
+  }
+
+
+------------------------------------------------------
+ HOW THEY ALL WORK TOGETHER
+------------------------------------------------------
+
+A typical protected endpoint in a controller looks like:
+
+  @Get('profile')
+  getProfile(@CurrentUser('sub') userId: string) {
+    return this.userService.getProfile(userId);
+  }
+
+The flow:
+  1. Request arrives with JWT cookie.
+  2. JwtStrategy extracts and validates the token.
+  3. Request.user is set to { sub: "abc", email: "..." }
+  4. CurrentUser decorator pulls "sub" from request.user.
+  5. The service does its work and returns via responseOk().
+  6. The client receives a consistent JSON response.
+
+For permission-protected endpoints:
+
+  @RequiredPermission('delete:user')
+  @Delete(':id')
+  deleteUser(@Param('id') id: string) {
+    return this.userService.remove(id);
+  }
+
+  1-4 same as above.
+  5. RolesGuard reads the "delete:user" metadata.
+  6. Guard looks up the user's role + permissions in DB.
+  7. If the user has "delete:user", the request proceeds.
+  8. If not, a 403 Forbidden is returned immediately.

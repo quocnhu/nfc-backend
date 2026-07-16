@@ -1,0 +1,40 @@
+nfc-project/
+├── prisma/
+│   ├── migrations/             # Automatically generated SQL files
+│   └── schema.prisma           # Database models and relations
+├── src/
+│   ├── auth/
+│   │   ├── dto/                # Auth-specific request objects (login/register)
+│   │   ├── passport/           # JWT strategy logic
+│   │   ├── auth.controller.ts  # Public login/register endpoints
+│   │   ├── auth.module.ts
+│   │   └── auth.service.ts     # Business logic: hashing, token generation
+│   ├── common/
+│   │   ├── decorators/         # @Public(), @Roles(), @GetUserId()
+│   │   ├── guards/             # JwtAuthGuard.ts, RolesGuard.ts
+│   │   ├── interceptors/       # Response formatters
+│   │   └── filters/            # Global exception filters
+│   ├── config/
+│   │   └── env.validation.ts   # Joi schema for validating .env variables
+│   ├── database/
+│   │   └── prisma.service.ts   # Extends PrismaClient, handles lifecycle
+│   ├── sharing-content/        # Feature: URL/Social management
+│   │   ├── dto/                # CreateContentDto, UpdateContentDto
+│   │   ├── sharing.controller.ts
+│   │   ├── sharing.service.ts
+│   │   └── sharing.module.ts
+│   ├── upload/
+│   │   ├── upload.controller.ts
+│   │   ├── upload.service.ts   # Supabase Storage integration logic
+│   │   └── upload.module.ts
+│   ├── user/
+│   │   ├── dto/                # UpdateProfileDto
+│   │   ├── user.controller.ts
+│   │   ├── user.service.ts     # Database queries for users
+│   │   └── user.module.ts
+│   ├── app.module.ts           # Imports all feature modules, sets up Global Guard
+│   └── main.ts                 # Configures validation pipes, CORS, and Port
+├── .env
+├── .gitignore
+├── package.json
+└── tsconfig.json
