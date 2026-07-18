@@ -7,6 +7,9 @@ import {
   IsOptional,
   Matches,
   IsUUID,
+  IsBoolean,
+  IsEnum,
+  IsDateString,
 } from 'class-validator';
 
 /**
@@ -72,6 +75,24 @@ export class UpdateUserDto {
   @IsOptional()
   @IsUUID()
   roleId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(6, { message: 'Password must be at least 6 characters' })
+  @MaxLength(128, { message: 'Password must not exceed 128 characters' })
+  newPassword?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isEmailVerified?: boolean;
+
+  @IsOptional()
+  @IsEnum(['ACTIVE', 'DISABLED'], { message: 'Status must be ACTIVE or DISABLED' })
+  status?: 'ACTIVE' | 'DISABLED';
+
+  @IsOptional()
+  @IsDateString({}, { message: 'expiresAt must be a valid date string' })
+  expiresAt?: string;
 }
 
 /**
@@ -130,4 +151,13 @@ export class AdminChangePasswordDto {
   @MinLength(6)
   @MaxLength(128)
   newPassword!: string;
+}
+
+/**
+ * UnlockUserDto — Validation for admin unlocking a locked user account.
+ * - id: Required UUID of the user to unlock.
+ */
+export class UnlockUserDto {
+  @IsUUID()
+  id!: string;
 }

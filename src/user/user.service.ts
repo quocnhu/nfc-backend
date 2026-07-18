@@ -14,18 +14,18 @@ export class UserService {
   constructor(private prisma: PrismaService) {}
 
   /**
-   * findAll — Get a paginated list of all users with optional search.
-   * 1. Calculate skip offset from page number.
-   * 2. Build a search filter (case-insensitive match on fullname or email).
-   * 3. Query users and total count in parallel for pagination.
-   * 4. Return users with pagination metadata (total, page, limit, totalPages).
+   * findAll — Get a paginated list of users with optional search.
+   * If hasReadAll is false, returns only the current user's record.
    */
-  async findAll(page: number = 1, limit: number = 20, search?: string) {
-    // Step 1: Calculate how many records to skip
+  async findAll(page: number = 1, limit: number = 20, search?: string, currentUserId?: string, hasReadAll: boolean = false) {
     const skip = (page - 1) * limit;
 
-    // Step 2: Build search filter — case-insensitive partial match
-    const where = search
+    // If user doesn't have read:user:all, filter to only their own record
+    const baseWhere = !hasReadAll && currentUserId
+      ? { id: currentUserId }
+      : {};
+
+    const searchWhere = search
       ? {
           OR: [
             { fullname: { contains: search, mode: 'insensitive' as const } },
@@ -34,7 +34,8 @@ export class UserService {
         }
       : {};
 
-    // Step 3: Fetch users and total count in parallel
+    const where = { ...baseWhere, ...searchWhere };
+
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
         where,
@@ -48,13 +49,17 @@ export class UserService {
           isEmailVerified: true,
           roleId: true,
           role: { select: { id: true, name: true } },
+          creator: { select: { id: true, fullname: true, email: true } },
+          failedLoginCount: true,
+          lockedUntil: true,
+          status: true,
+          expiresAt: true,
         },
         orderBy: { email: 'asc' },
       }),
       this.prisma.user.count({ where }),
     ]);
 
-    // Step 4: Return paginated results
     return responseOk('Users fetched successfully', {
       data: users,
       meta: {
@@ -85,6 +90,8 @@ export class UserService {
         userPermissions: {
           include: { permission: { select: { id: true, name: true } } },
         },
+        status: true,
+        expiresAt: true,
       },
     });
 
@@ -126,6 +133,8 @@ export class UserService {
         avatarUrl: true,
         isEmailVerified: true,
         role: { select: { id: true, name: true } },
+        status: true,
+        expiresAt: true,
       },
     });
 
@@ -162,12 +171,9 @@ export class UserService {
 
   /**
    * create — Create a new user (admin operation).
-   * 1. Check email uniqueness → 409 if duplicate.
-   * 2. Hash the password with bcrypt.
-   * 3. If roleId is provided, assign that role. Otherwise default to "USER".
-   * 4. Create the user and return the result (password excluded from response).
+   * Sets createdBy to the admin's userId.
    */
-  async create(dto: CreateUserDto) {
+  async create(dto: CreateUserDto, createdByUserId?: string) {
     // Step 1: Check for existing user with same email
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -186,6 +192,7 @@ export class UserService {
       password: hash,
       fullname: dto.fullname,
       avatarUrl: dto.avatarUrl,
+      createdBy: createdByUserId || null,
     };
 
     if (dto.roleId) {
@@ -204,6 +211,9 @@ export class UserService {
         avatarUrl: true,
         isEmailVerified: true,
         role: { select: { id: true, name: true } },
+        creator: { select: { id: true, fullname: true, email: true } },
+        status: true,
+        expiresAt: true,
       },
     });
 
@@ -211,17 +221,13 @@ export class UserService {
   }
 
   /**
-   * update — Update any user by ID (admin operation).
-   * 1. Verify user exists → 404 if not.
-   * 2. Check email uniqueness if changing → 409 if conflict.
-   * 3. Update user record with provided fields including roleId.
+   * update — Update any user by ID (admin or self via update:user permission).
+   * Supports optional newPassword field to change password during update.
    */
-  async update(id: string, dto: UpdateUserDto) {
-    // Step 1: Verify user exists
+  async update(id: string, dto: UpdateUserDto, currentUserId?: string) {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
 
-    // Step 2: Check email uniqueness if changing
     if (dto.email && dto.email !== user.email) {
       const emailTaken = await this.prisma.user.findUnique({
         where: { email: dto.email },
@@ -229,21 +235,32 @@ export class UserService {
       if (emailTaken) throw new ConflictException('Email already in use');
     }
 
-    // Step 3: Update the user
+    const updateData: any = {
+      fullname: dto.fullname,
+      avatarUrl: dto.avatarUrl,
+      roleId: dto.roleId,
+    };
+
+    if (dto.email) updateData.email = dto.email;
+    if (dto.isEmailVerified !== undefined) updateData.isEmailVerified = dto.isEmailVerified;
+    if (dto.status) updateData.status = dto.status;
+    if (dto.expiresAt) updateData.expiresAt = new Date(dto.expiresAt);
+
+    if (dto.newPassword) {
+      updateData.password = await bcrypt.hash(dto.newPassword, 10);
+    }
+
     const updated = await this.prisma.user.update({
       where: { id },
-      data: {
-        email: dto.email,
-        fullname: dto.fullname,
-        avatarUrl: dto.avatarUrl,
-        roleId: dto.roleId,
-      },
+      data: updateData,
       select: {
         id: true,
         email: true,
         fullname: true,
         avatarUrl: true,
         isEmailVerified: true,
+        status: true,
+        expiresAt: true,
         role: { select: { id: true, name: true } },
       },
     });
@@ -281,8 +298,14 @@ export class UserService {
 
   /**
    * remove — Delete a user by ID (admin operation).
+   * Cannot delete yourself or ADMIN users.
    */
-  async remove(id: string) {
+  async remove(id: string, currentUserId?: string) {
+    // Block self-deletion
+    if (currentUserId && id === currentUserId) {
+      throw new ForbiddenException('Cannot delete yourself');
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id },
       include: { role: true },
@@ -312,5 +335,47 @@ export class UserService {
     });
 
     return responseOk('Password changed successfully');
+  }
+
+  /**
+   * unlock — Admin unlocks a locked user account.
+   * Resets failedLoginCount to 0 and lockedUntil to null.
+   */
+  async unlock(id: string, performedByUserId?: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+
+    if (!user.lockedUntil) {
+      return responseOk('Account is not locked');
+    }
+
+    await this.prisma.user.update({
+      where: { id },
+      data: { failedLoginCount: 0, lockedUntil: null },
+    });
+
+    return responseOk('Account unlocked successfully');
+  }
+
+  /**
+   * verifyEmail — Admin manually verifies a user's email.
+   * Sets isEmailVerified to true and removes any pending verification tokens.
+   */
+  async verifyEmail(id: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+
+    if (user.isEmailVerified) {
+      return responseOk('Email is already verified');
+    }
+
+    await this.prisma.user.update({
+      where: { id },
+      data: { isEmailVerified: true },
+    });
+
+    await this.prisma.emailVerification.deleteMany({ where: { email: user.email } });
+
+    return responseOk('Email verified successfully');
   }
 }

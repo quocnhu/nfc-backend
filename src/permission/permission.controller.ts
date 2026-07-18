@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { PermissionService } from './permission.service';
 import { CreatePermissionDto, UpdatePermissionDto, DeletePermissionDto } from './dto/permission.dto';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @Controller('permissions')
 export class PermissionController {
@@ -18,8 +19,8 @@ export class PermissionController {
    */
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() dto: CreatePermissionDto) {
-    return this.permissionService.create(dto);
+  create(@CurrentUser('sub') userId: string, @Body() dto: CreatePermissionDto) {
+    return this.permissionService.create(dto, userId);
   }
 
   /**

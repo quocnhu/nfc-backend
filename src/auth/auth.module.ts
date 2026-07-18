@@ -9,6 +9,7 @@ import { PrismaModule } from '../database/prisma/prisma.module';
   imports: [JwtModule.register({}), PrismaModule],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],
+  exports: [AuthService],
 })
 export class AuthModule {}
 

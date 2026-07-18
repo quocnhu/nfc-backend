@@ -9,8 +9,9 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { UserService } from './user.service';
-import { CreateUserDto, UpdateUserDto, DeleteUserDto, ChangePasswordDto, AssignPermissionsDto, AdminChangePasswordDto } from './dto/user.dto';
+import { CreateUserDto, UpdateUserDto, DeleteUserDto, ChangePasswordDto, AssignPermissionsDto, AdminChangePasswordDto, UnlockUserDto } from './dto/user.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { PrismaService } from '../database/prisma/prisma.service';
 
 @Controller('user')
 export class UserSelfController {
@@ -24,7 +25,10 @@ export class UserSelfController {
 
 @Controller('users')
 export class UserController {
-  constructor(private userService: UserService) {}
+  constructor(
+    private userService: UserService,
+    private prisma: PrismaService,
+  ) {}
 
   // ─── Self-service routes (any authenticated user can access their own data) ───
 
@@ -64,20 +68,25 @@ export class UserController {
   // ─── Admin operations (permission checked by RolesGuard automatically) ───
 
   /**
-   * GET /users — List all users with pagination and search.
-   * Query params: ?page=1&limit=20&search=john
-   * Returns paginated user list with total count and total pages.
+   * GET /users — List users with pagination and search.
+   * Non-admin users (without read:user:all) only see their own record.
    */
   @Get()
-  findAll(
+  async findAll(
+    @CurrentUser('sub') userId: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
   ) {
+    // Check if user has read:user:all permission
+    const hasReadAll = await this.checkUserPermission(userId, 'read:user:all');
+
     return this.userService.findAll(
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 20,
       search,
+      userId,
+      hasReadAll,
     );
   }
 
@@ -87,8 +96,8 @@ export class UserController {
    */
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() dto: CreateUserDto) {
-    return this.userService.create(dto);
+  create(@CurrentUser('sub') userId: string, @Body() dto: CreateUserDto) {
+    return this.userService.create(dto, userId);
   }
 
   /**
@@ -97,8 +106,8 @@ export class UserController {
    */
   @Post('update')
   @HttpCode(HttpStatus.OK)
-  update(@Body() dto: UpdateUserDto) {
-    return this.userService.update(dto.id, dto);
+  update(@CurrentUser('sub') userId: string, @Body() dto: UpdateUserDto) {
+    return this.userService.update(dto.id, dto, userId);
   }
 
   /**
@@ -124,11 +133,52 @@ export class UserController {
 
   /**
    * POST /users/delete — Delete a user (admin only).
-   * Cannot delete ADMIN users. Accepts: id (userId).
+   * Cannot delete yourself or ADMIN users. Accepts: id (userId).
    */
   @Post('delete')
   @HttpCode(HttpStatus.OK)
-  remove(@Body() dto: DeleteUserDto) {
-    return this.userService.remove(dto.id);
+  remove(@CurrentUser('sub') userId: string, @Body() dto: DeleteUserDto) {
+    return this.userService.remove(dto.id, userId);
+  }
+
+  /**
+   * POST /users/unlock — Unlock a locked user account (admin only).
+   * Resets failedLoginCount and lockedUntil to null.
+   */
+  @Post('unlock')
+  @HttpCode(HttpStatus.OK)
+  unlock(@CurrentUser('sub') userId: string, @Body() dto: UnlockUserDto) {
+    return this.userService.unlock(dto.id, userId);
+  }
+
+  /**
+   * POST /users/verify-email — Admin manually verifies a user's email (admin only).
+   * Sets isEmailVerified to true and removes pending verification tokens.
+   */
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  verifyEmail(@Body() dto: { id: string }) {
+    return this.userService.verifyEmail(dto.id);
+  }
+
+  /**
+   * Check if a user has a specific permission (from role or individual).
+   */
+  private async checkUserPermission(userId: string, permissionName: string): Promise<boolean> {
+    const userData = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        role: { include: { permissions: true } },
+        userPermissions: { include: { permission: true } },
+      },
+    });
+
+    if (!userData) return false;
+
+    const rolePerms = userData.role.permissions.map((p) => p.name);
+    const userPerms = userData.userPermissions.map((up) => up.permission.name);
+    const allPermissions = new Set([...rolePerms, ...userPerms]);
+
+    return allPermissions.has(permissionName);
   }
 }

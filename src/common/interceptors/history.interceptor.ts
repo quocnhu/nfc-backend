@@ -62,6 +62,9 @@ export class HistoryInterceptor implements NestInterceptor {
     const body = request.body;
     const params = request.params;
 
+    const ipAddress = request.ip || request.headers['x-forwarded-for'] || request.socket?.remoteAddress || null;
+    const userAgent = request.headers['user-agent'] || null;
+
     // Store request body before handler runs so we can capture old values for updates
     const requestBody = body ? { ...body } : null;
 
@@ -88,6 +91,8 @@ export class HistoryInterceptor implements NestInterceptor {
           params?.id || response?.data?.id || null,
           resource,
           details,
+          ipAddress,
+          userAgent,
         );
       }),
     );

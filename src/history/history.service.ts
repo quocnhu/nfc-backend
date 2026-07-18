@@ -11,19 +11,23 @@ export class HistoryService {
    * Called by the HistoryInterceptor after each non-GET request.
    * Stores: userId, action (e.g. "create:sharingcontent"), entityId, entityType, details.
    */
-  async log(userId: string, action: string, entityId?: string, entityType?: string, details?: string) {
+  async log(userId: string, action: string, entityId?: string, entityType?: string, details?: string, ipAddress?: string, userAgent?: string) {
     return this.prisma.history.create({
-      data: { userId, action, entityId, entityType, details },
+      data: { userId, action, entityId, entityType, details, ipAddress, userAgent },
     });
   }
 
   /**
-   * findAll — Get all history records across all users.
-   * Includes user info (id, fullname, email) for each entry.
-   * Ordered by timestamp descending (newest first).
+   * findAll — Get history records.
+   * If hasReadAll is false, returns only the current user's records.
    */
-  async findAll() {
+  async findAll(currentUserId?: string, hasReadAll: boolean = false) {
+    const where = !hasReadAll && currentUserId
+      ? { userId: currentUserId }
+      : {};
+
     const histories = await this.prisma.history.findMany({
+      where,
       include: { user: { select: { id: true, fullname: true, email: true } } },
       orderBy: { timestamp: 'desc' },
     });

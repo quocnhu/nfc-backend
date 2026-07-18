@@ -14,17 +14,19 @@ export class RoleService {
 
   async findAll() {
     const roles = await this.prisma.role.findMany({
-      include: { permissions: { select: { id: true, name: true } } },
+      include: {
+        permissions: { select: { id: true, name: true } },
+        creator: { select: { id: true, fullname: true, email: true } },
+      },
     });
     return responseOk('Roles fetched successfully', roles);
   }
 
   /**
    * create — Create a new role.
-   * 1. Check if role name already exists → 409 if duplicate.
-   * 2. Create the role record in DB.
+   * Sets createdBy to the admin's userId.
    */
-  async create(dto: CreateRoleDto) {
+  async create(dto: CreateRoleDto, createdByUserId?: string) {
     // Step 1: Check for duplicate name
     const existing = await this.prisma.role.findUnique({
       where: { name: dto.name },
@@ -36,7 +38,13 @@ export class RoleService {
 
     // Step 2: Create the role
     const role = await this.prisma.role.create({
-      data: { name: dto.name },
+      data: {
+        name: dto.name,
+        createdBy: createdByUserId || null,
+      },
+      include: {
+        creator: { select: { id: true, fullname: true, email: true } },
+      },
     });
 
     return responseCreated('Role created successfully', role);

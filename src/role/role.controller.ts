@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { RoleService } from './role.service';
 import { CreateRoleDto, UpdateRoleDto, DeleteRoleDto } from './dto/role.dto';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @Controller('roles')
 export class RoleController {
@@ -18,8 +19,8 @@ export class RoleController {
    */
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() dto: CreateRoleDto) {
-    return this.roleService.create(dto);
+  create(@CurrentUser('sub') userId: string, @Body() dto: CreateRoleDto) {
+    return this.roleService.create(dto, userId);
   }
 
   /**

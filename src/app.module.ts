@@ -4,16 +4,19 @@ import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './database/prisma/prisma.module';
+import { SupabaseModule } from './config/supabase.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { SharingContentModule } from './sharing-content/sharing-content.module';
 import { HistoryModule } from './history/history.module';
 import { DashboardModule } from './dashboard/dashboard.module';
-import { AvatarModule } from './avatar/avatar.module';
+import { UploadModule } from './upload/upload.module';
 import { UserModule } from './user/user.module';
 import { RoleModule } from './role/role.module';
 import { PermissionModule } from './permission/permission.module';
+import { QRModule } from './qr/qr.module';
+import { PaymentModule } from './payment/payment.module';
 import { HistoryInterceptor } from './common/interceptors/history.interceptor';
 
 /**
@@ -37,14 +40,17 @@ import { HistoryInterceptor } from './common/interceptors/history.interceptor';
       isGlobal: true,
     }),
     PrismaModule,       // Database connection (Prisma ORM)
+    SupabaseModule,    // Supabase storage client
     AuthModule,         // Authentication (signup, signin, logout, JWT, password reset)
     SharingContentModule, // Sharing content CRUD + public NFC endpoint
     HistoryModule,      // Audit trail logging and retrieval
     DashboardModule,    // Dashboard stats, permissions breakdown, recent activity
-    AvatarModule,       // Avatar upload/download/delete via Supabase Storage
+    UploadModule,       // Avatar upload/download/delete via Supabase Storage
     UserModule,         // User CRUD, self-service profile, permission assignment
     RoleModule,         // Role CRUD with permission assignment
     PermissionModule,   // Permission CRUD
+    QRModule,           // QR code generation
+    PaymentModule,      // PayPal payment processing
   ],
   controllers: [AppController],
   providers: [

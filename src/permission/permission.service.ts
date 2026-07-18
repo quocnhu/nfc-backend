@@ -13,16 +13,19 @@ export class PermissionService {
   constructor(private prisma: PrismaService) {}
 
   async findAll() {
-    const permissions = await this.prisma.permission.findMany();
+    const permissions = await this.prisma.permission.findMany({
+      include: {
+        creator: { select: { id: true, fullname: true, email: true } },
+      },
+    });
     return responseOk('Permissions fetched successfully', permissions);
   }
 
   /**
    * create — Create a new permission.
-   * 1. Check if permission name already exists → 409 if duplicate.
-   * 2. Create the permission record in DB.
+   * Sets createdBy to the admin's userId.
    */
-  async create(dto: CreatePermissionDto) {
+  async create(dto: CreatePermissionDto, createdByUserId?: string) {
     // Step 1: Check for duplicate name
     const existing = await this.prisma.permission.findUnique({
       where: { name: dto.name },
@@ -34,7 +37,13 @@ export class PermissionService {
 
     // Step 2: Create the permission
     const permission = await this.prisma.permission.create({
-      data: { name: dto.name },
+      data: {
+        name: dto.name,
+        createdBy: createdByUserId || null,
+      },
+      include: {
+        creator: { select: { id: true, fullname: true, email: true } },
+      },
     });
 
     return responseCreated('Permission created successfully', permission);

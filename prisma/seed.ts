@@ -12,6 +12,7 @@ const permissions = [
   // User management
   'create:user',
   'read:user',
+  'read:user:all',
   'update:user',
   'delete:user',
   // Role management
@@ -22,16 +23,26 @@ const permissions = [
   // Sharing content
   'create:sharingcontent',
   'read:sharingcontent',
+  'read:sharingcontent:all',
   'update:sharingcontent',
   'delete:sharingcontent',
   // History
   'read:history',
+  'read:history:all',
   // Dashboard
   'read:dashboard',
   // Avatar
   'create:avatar',
   'read:avatar',
   'delete:avatar',
+  // Upload
+  'read:upload',
+  'create:upload',
+  'delete:upload',
+  // QR
+  'read:qr',
+  'create:qr',
+  'delete:qr',
   // Permission management
   'create:permission',
   'read:permission',
@@ -41,6 +52,20 @@ const permissions = [
 
 async function main() {
   console.log('Seeding database...\n');
+
+  // 0. Create built-in upload folders
+  const builtInFolders = [
+    { name: 'avatars', displayName: 'Avatars (Profile Pictures)', description: 'For user profiles. Max 3MB, 512x512px.', isSystem: true },
+    { name: 'icons', displayName: 'Icons (NFC Item Icons)', description: 'For sharing content items. Max 2MB, 256x256px.', isSystem: true },
+  ];
+  for (const folder of builtInFolders) {
+    await prisma.folder.upsert({
+      where: { name: folder.name },
+      update: {},
+      create: folder,
+    });
+  }
+  console.log(`Created ${builtInFolders.length} built-in folders`);
 
   // 1. Create permissions
   const createdPermissions: { id: string; name: string }[] = [];
@@ -87,6 +112,11 @@ async function main() {
     'create:avatar',
     'read:avatar',
     'delete:avatar',
+    'read:upload',
+    'create:upload',
+    'read:qr',
+    'create:qr',
+    'delete:qr',
   ];
 
   const userPermissions = createdPermissions.filter((p) =>
@@ -178,43 +208,57 @@ async function main() {
   });
   console.log(`VIP user: ${vipUser.email}`);
 
-  // 8. Admin sharing content (YouTube + TikTok) — for testing public NFC endpoint
+  // 8. Clear old sharing content and re-seed
+  await prisma.sharingContent.deleteMany();
+  console.log('Cleared existing sharing content');
+
   const adminSharingItems = [
-    {
-      userId: adminUser.id,
-      url: 'https://youtube.com/@quocnhu',
-      itemName: 'YouTube',
-      icon: 'youtube',
-    },
-    {
-      userId: adminUser.id,
-      url: 'https://tiktok.com/@quocnhu',
-      itemName: 'TikTok',
-      icon: 'tiktok',
-    },
+    { userId: adminUser.id, url: 'https://youtube.com/@quocnhu', itemName: 'YouTube', icon: 'youtube' },
+    { userId: adminUser.id, url: 'https://tiktok.com/@quocnhu', itemName: 'TikTok', icon: 'tiktok' },
+    { userId: adminUser.id, url: 'mailto:admin@example.com', itemName: 'Email', icon: 'mail' },
+    { userId: adminUser.id, url: 'https://linkedin.com/in/quocnhu', itemName: 'LinkedIn', icon: 'linkedin' },
   ];
 
   for (const item of adminSharingItems) {
     await prisma.sharingContent.create({ data: item });
   }
-  console.log(`Admin sharing content: ${adminSharingItems.length} items (YouTube, TikTok)`);
-  console.log(`  → Test with: POST /sharing-content/public/user { "userId": "${adminUser.id}" }`);
+  console.log(`Admin sharing content: ${adminSharingItems.length} items`);
 
-  // 9. Demo user sharing content
-  await prisma.sharingContent.create({
-    data: {
-      userId: demoUser.id,
-      url: 'https://example.com/shared-item',
-      itemName: 'Welcome Post',
-      icon: 'star',
-    },
-  });
-  console.log('Demo sharing content created');
+  // 9. Demo user sharing content (USER role — gets UserTemplate)
+  const demoSharingItems = [
+    { userId: demoUser.id, url: 'https://facebook.com/quocnhu', itemName: 'Facebook', icon: 'facebook' },
+    { userId: demoUser.id, url: 'https://instagram.com/quocnhu', itemName: 'Instagram', icon: 'instagram' },
+    { userId: demoUser.id, url: 'mailto:demo@example.com', itemName: 'Email', icon: 'mail' },
+    { userId: demoUser.id, url: 'tel:+84123456789', itemName: 'Phone', icon: 'phone' },
+    { userId: demoUser.id, url: 'https://github.com/quocnhu', itemName: 'GitHub', icon: 'github' },
+  ];
+
+  for (const item of demoSharingItems) {
+    await prisma.sharingContent.create({ data: item });
+  }
+  console.log(`Demo user sharing content: ${demoSharingItems.length} items`);
+
+  // 10. VIP user sharing content (VIP role — gets VipTemplate)
+  const vipSharingItems = [
+    { userId: vipUser.id, url: 'https://youtube.com/@vipuser', itemName: 'YouTube', icon: 'youtube' },
+    { userId: vipUser.id, url: 'https://tiktok.com/@vipuser', itemName: 'TikTok', icon: 'tiktok' },
+    { userId: vipUser.id, url: 'https://facebook.com/vipuser', itemName: 'Facebook', icon: 'facebook' },
+    { userId: vipUser.id, url: 'https://instagram.com/vipuser', itemName: 'Instagram', icon: 'instagram' },
+    { userId: vipUser.id, url: 'https://linkedin.com/in/vipuser', itemName: 'LinkedIn', icon: 'linkedin' },
+    { userId: vipUser.id, url: 'mailto:vip@example.com', itemName: 'Email', icon: 'mail' },
+    { userId: vipUser.id, url: 'tel:+84987654321', itemName: 'Phone', icon: 'phone' },
+  ];
+
+  for (const item of vipSharingItems) {
+    await prisma.sharingContent.create({ data: item });
+  }
+  console.log(`VIP user sharing content: ${vipSharingItems.length} items`);
 
   console.log('\n--- Seed Complete ---');
-  console.log(`ADMIN : admin@example.com / Admin@123`);
-  console.log(`USER  : demo@example.com / Demo@123`);
-  console.log(`VIP   : vip@example.com / Vip@123`);
+  console.log(`ADMIN : admin@example.com / Admin@123  (id: ${adminUser.id})`);
+  console.log(`USER  : demo@example.com  / Demo@123   (id: ${demoUser.id})`);
+  console.log(`VIP   : vip@example.com   / Vip@123    (id: ${vipUser.id})`);
+  console.log(`\nTest public profile: /public/user?userId=${adminUser.id}`);
 }
 
 main()

@@ -45,4 +45,9 @@ export class DashboardController {
   getUsersByRole() {
     return this.dashboardService.getUsersByRole();
   }
+
+  @Get('suspicious')
+  getSuspiciousActivity() {
+    return this.dashboardService.getSuspiciousActivity();
+  }
 }

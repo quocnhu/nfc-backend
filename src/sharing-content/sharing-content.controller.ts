@@ -12,10 +12,14 @@ import { CreateSharingContentDto } from './dto/create-sharing-content.dto';
 import { UpdateSharingContentDto, DeleteSharingContentDto, GetSharingContentDto } from './dto/update-sharing-content.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
+import { PrismaService } from '../database/prisma/prisma.service';
 
 @Controller('sharing-content')
 export class SharingContentController {
-  constructor(private sharingContentService: SharingContentService) {}
+  constructor(
+    private sharingContentService: SharingContentService,
+    private prisma: PrismaService,
+  ) {}
 
   // ─── Public routes (no authentication required) ───
 
@@ -36,25 +40,28 @@ export class SharingContentController {
 
   /**
    * POST /sharing-content — Create a new sharing content item.
+   * Admin can assign to any user via targetUserId.
    * The userId is extracted from the JWT token.
-   * Accepts: url, itemName, icon.
+   * Accepts: url, itemName, icon, targetUserId (optional, admin only).
    */
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(
+  async create(
     @CurrentUser('sub') userId: string,
     @Body() dto: CreateSharingContentDto,
   ) {
-    return this.sharingContentService.create(userId, dto);
+    const hasReadAll = await this.checkUserPermission(userId, 'read:sharingcontent:all');
+    return this.sharingContentService.create(userId, dto, hasReadAll);
   }
 
   /**
-   * GET /sharing-content — List all sharing content items (with user info).
-   * Returns all items from all users, ordered by creation date descending.
+   * GET /sharing-content — List sharing content items.
+   * Non-admin users (without read:sharingcontent:all) only see their own items.
    */
   @Get()
-  findAll() {
-    return this.sharingContentService.findAll();
+  async findAll(@CurrentUser('sub') userId: string) {
+    const hasReadAll = await this.checkUserPermission(userId, 'read:sharingcontent:all');
+    return this.sharingContentService.findAll(userId, hasReadAll);
   }
 
   /**
@@ -78,26 +85,47 @@ export class SharingContentController {
 
   /**
    * POST /sharing-content/update — Update a sharing content item.
-   * Ownership check: only the creator can update their own content.
-   * Accepts: id (required), url, itemName, icon (all optional).
+   * Admin (read:sharingcontent:all) can update any. Others can only update their own.
    */
   @Post('update')
   @HttpCode(HttpStatus.OK)
-  update(
+  async update(
     @CurrentUser('sub') userId: string,
     @Body() dto: UpdateSharingContentDto,
   ) {
-    return this.sharingContentService.update(dto.id, userId, dto);
+    const hasReadAll = await this.checkUserPermission(userId, 'read:sharingcontent:all');
+    return this.sharingContentService.update(dto.id, userId, dto, hasReadAll);
   }
 
   /**
    * POST /sharing-content/delete — Delete a sharing content item.
-   * Ownership check: only the creator can delete their own content.
-   * Accepts: { id } in request body.
+   * Admin (read:sharingcontent:all) can delete any. Others can only delete their own.
    */
   @Post('delete')
   @HttpCode(HttpStatus.OK)
-  remove(@CurrentUser('sub') userId: string, @Body() dto: DeleteSharingContentDto) {
-    return this.sharingContentService.remove(dto.id, userId);
+  async remove(@CurrentUser('sub') userId: string, @Body() dto: DeleteSharingContentDto) {
+    const hasReadAll = await this.checkUserPermission(userId, 'read:sharingcontent:all');
+    return this.sharingContentService.remove(dto.id, userId, hasReadAll);
+  }
+
+  /**
+   * Check if a user has a specific permission (from role or individual).
+   */
+  private async checkUserPermission(userId: string, permissionName: string): Promise<boolean> {
+    const userData = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        role: { include: { permissions: true } },
+        userPermissions: { include: { permission: true } },
+      },
+    });
+
+    if (!userData) return false;
+
+    const rolePerms = userData.role.permissions.map((p) => p.name);
+    const userPerms = userData.userPermissions.map((up) => up.permission.name);
+    const allPermissions = new Set([...rolePerms, ...userPerms]);
+
+    return allPermissions.has(permissionName);
   }
 }
