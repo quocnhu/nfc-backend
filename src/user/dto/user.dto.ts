@@ -8,7 +8,6 @@ import {
   Matches,
   IsUUID,
   IsBoolean,
-  IsEnum,
   IsDateString,
 } from 'class-validator';
 
@@ -87,12 +86,13 @@ export class UpdateUserDto {
   isEmailVerified?: boolean;
 
   @IsOptional()
-  @IsEnum(['ACTIVE', 'DISABLED'], { message: 'Status must be ACTIVE or DISABLED' })
-  status?: 'ACTIVE' | 'DISABLED';
+  @IsDateString()
+  expiresAt?: string | null;
+}
 
-  @IsOptional()
-  @IsDateString({}, { message: 'expiresAt must be a valid date string' })
-  expiresAt?: string;
+export class ToggleStatusDto {
+  @IsUUID()
+  id!: string;
 }
 
 /**

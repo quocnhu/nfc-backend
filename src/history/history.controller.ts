@@ -1,7 +1,7 @@
 import { Controller, Get, Query } from '@nestjs/common';
-import { HistoryService } from './history.service';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { PrismaService } from '../database/prisma/prisma.service';
+import { HistoryService } from '@/history/history.service';
+import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { PrismaService } from '@/database/prisma/prisma.service';
 
 @Controller('history')
 export class HistoryController {

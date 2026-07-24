@@ -4,10 +4,10 @@ import {
   ForbiddenException,
   ConflictException,
 } from '@nestjs/common';
-import { PrismaService } from '../database/prisma/prisma.service';
-import { CreateUserDto, UpdateUserDto, ChangePasswordDto, AssignPermissionsDto } from './dto/user.dto';
+import { PrismaService } from '@/database/prisma/prisma.service';
+import { CreateUserDto, UpdateUserDto, ChangePasswordDto, AssignPermissionsDto } from '@/user/dto/user.dto';
 import * as bcrypt from 'bcrypt';
-import { responseOk, responseCreated } from '../common/helpers/response.helper';
+import { responseOk, responseCreated } from '@/common/helpers/response.helper';
 
 @Injectable()
 export class UserService {
@@ -54,6 +54,12 @@ export class UserService {
           lockedUntil: true,
           status: true,
           expiresAt: true,
+          subscriptions: {
+            where: { isCurrent: true },
+            take: 1,
+            include: { plan: true },
+            orderBy: { createdAt: 'desc' },
+          },
         },
         orderBy: { email: 'asc' },
       }),
@@ -172,6 +178,8 @@ export class UserService {
   /**
    * create — Create a new user (admin operation).
    * Sets createdBy to the admin's userId.
+   * If creating an ADMIN user: auto-verify email and set status to ACTIVE.
+   * For other roles: require email verification (isEmailVerified: false, status: INACTIVE).
    */
   async create(dto: CreateUserDto, createdByUserId?: string) {
     // Step 1: Check for existing user with same email
@@ -186,7 +194,8 @@ export class UserService {
     // Step 2: Hash the password
     const hash = await bcrypt.hash(dto.password, 10);
 
-    // Step 3: Prepare user data with optional role assignment
+    // Step 3: Determine role and verification status
+    let isAdminRole = false;
     const createData: any = {
       email: dto.email,
       password: hash,
@@ -196,12 +205,23 @@ export class UserService {
     };
 
     if (dto.roleId) {
+      const role = await this.prisma.role.findUnique({ where: { id: dto.roleId } });
+      isAdminRole = role?.name === 'ADMIN';
       createData.roleId = dto.roleId;
     } else {
       createData.role = { connect: { name: 'USER' } };
     }
 
-    // Step 4: Create the user in DB
+    // Step 4: Set verification and status based on role
+    if (isAdminRole) {
+      createData.isEmailVerified = true;
+      createData.status = 'ACTIVE';
+    } else {
+      createData.isEmailVerified = false;
+      createData.status = 'INACTIVE';
+    }
+
+    // Step 5: Create the user in DB
     const user = await this.prisma.user.create({
       data: createData,
       select: {
@@ -243,8 +263,9 @@ export class UserService {
 
     if (dto.email) updateData.email = dto.email;
     if (dto.isEmailVerified !== undefined) updateData.isEmailVerified = dto.isEmailVerified;
-    if (dto.status) updateData.status = dto.status;
-    if (dto.expiresAt) updateData.expiresAt = new Date(dto.expiresAt);
+    if (dto.expiresAt !== undefined) {
+      updateData.expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
+    }
 
     if (dto.newPassword) {
       updateData.password = await bcrypt.hash(dto.newPassword, 10);
@@ -377,5 +398,39 @@ export class UserService {
     await this.prisma.emailVerification.deleteMany({ where: { email: user.email } });
 
     return responseOk('Email verified successfully');
+  }
+
+  async toggleStatus(id: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+
+    if (user.roleId) {
+      const role = await this.prisma.role.findUnique({ where: { id: user.roleId } });
+      if (role?.name === 'ADMIN') {
+        throw new ForbiddenException('Admin status cannot be changed');
+      }
+    }
+
+    const newStatus = user.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    const updateData: any = { status: newStatus };
+
+    if (newStatus === 'ACTIVE') {
+      updateData.expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: updateData,
+      select: {
+        id: true,
+        email: true,
+        fullname: true,
+        status: true,
+        expiresAt: true,
+        role: { select: { id: true, name: true } },
+      },
+    });
+
+    return responseOk(`User status changed to ${newStatus}`, updated);
   }
 }

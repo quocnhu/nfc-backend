@@ -11,7 +11,9 @@
     "sourceMap": true,
     "outDir": "./dist",
     "rootDir": "./src",
-
+    "paths": {
+      "@/*": ["./src/*"]
+    },
     "skipLibCheck": true,
     "strictNullChecks": true,
     "noImplicitAny": false,

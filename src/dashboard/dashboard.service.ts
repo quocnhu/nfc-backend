@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../database/prisma/prisma.service';
-import { AuthService } from '../auth/auth.service';
-import { responseOk } from '../common/helpers/response.helper';
+import { PrismaService } from '@/database/prisma/prisma.service';
+import { AuthService } from '@/auth/auth.service';
+import { responseOk } from '@/common/helpers/response.helper';
 
 @Injectable()
 export class DashboardService {
@@ -10,11 +10,6 @@ export class DashboardService {
     private authService: AuthService,
   ) {}
 
-  /**
-   * getStats — Get aggregate counts for the dashboard stat cards.
-   * Queries all 5 tables in parallel for performance.
-   * Returns: totalUsers, totalRoles, totalPermissions, totalSharingContent, totalHistories.
-   */
   async getStats() {
     const [totalUsers, totalRoles, totalPermissions, totalSharingContent, totalHistories] =
       await Promise.all([
@@ -34,29 +29,42 @@ export class DashboardService {
     });
   }
 
-  /**
-   * getUserPermissions — Get a full permissions breakdown for the logged-in user.
-   * 1. Fetch user with role permissions and individual permissions.
-   * 2. Merge role-based and user-level permissions into a unique set.
-   * Returns: user info, role name, rolePermissions, directPermissions, mergedPermissions.
-   */
+  async getRequestCounts() {
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+
+    const [todayCount, monthCount, yearCount] = await Promise.all([
+      this.prisma.history.count({
+        where: { action: 'read:publicview', timestamp: { gte: startOfDay } },
+      }),
+      this.prisma.history.count({
+        where: { action: 'read:publicview', timestamp: { gte: startOfMonth } },
+      }),
+      this.prisma.history.count({
+        where: { action: 'read:publicview', timestamp: { gte: startOfYear } },
+      }),
+    ]);
+
+    return responseOk('Request counts fetched successfully', {
+      today: todayCount,
+      month: monthCount,
+      year: yearCount,
+    });
+  }
+
   async getUserPermissions(userId: string) {
-    // Step 1: Fetch user with all permission relations
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
-        role: {
-          include: { permissions: true },
-        },
-        userPermissions: {
-          include: { permission: true },
-        },
+        role: { include: { permissions: true } },
+        userPermissions: { include: { permission: true } },
       },
     });
 
     if (!user) return responseOk('User not found', null);
 
-    // Step 2: Separate and merge permissions
     const rolePerms = user.role.permissions.map((p) => p.name);
     const userPerms = user.userPermissions.map((up) => up.permission.name);
     const mergedPermissions = [...new Set([...rolePerms, ...userPerms])];
@@ -70,9 +78,6 @@ export class DashboardService {
     });
   }
 
-  /**
-   * getRecentActivity — Get recent history entries for the dashboard.
-   */
   async getRecentActivity(limit: number = 20) {
     const activities = await this.prisma.history.findMany({
       include: { user: { select: { id: true, fullname: true, email: true } } },
@@ -83,9 +88,6 @@ export class DashboardService {
     return responseOk('Recent activity fetched successfully', activities);
   }
 
-  /**
-   * getUserPermissionsById — Get any user's permissions breakdown (admin use).
-   */
   async getUserPermissionsById(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -110,9 +112,6 @@ export class DashboardService {
     });
   }
 
-  /**
-   * getUsersByRole — Get all users grouped by role.
-   */
   async getUsersByRole() {
     const roles = await this.prisma.role.findMany({
       include: {
@@ -123,6 +122,118 @@ export class DashboardService {
     });
 
     return responseOk('Users by role fetched successfully', roles);
+  }
+
+  async getSubscriptionStats(startDate?: string, endDate?: string) {
+    const now = new Date();
+    let dateFilter: any = {};
+
+    if (startDate) {
+      dateFilter.createdAt = { ...dateFilter.createdAt, gte: new Date(startDate) };
+    }
+    if (endDate) {
+      dateFilter.createdAt = { ...dateFilter.createdAt, lte: new Date(endDate) };
+    }
+
+    const where = Object.keys(dateFilter).length > 0 ? dateFilter : {};
+
+    const [totalSubscriptions, activeCount, expiredCount, trialCount] = await Promise.all([
+      this.prisma.subscription.count({ where }),
+      this.prisma.subscription.count({ where: { ...where, status: 'ACTIVE', isCurrent: true } }),
+      this.prisma.subscription.count({ where: { ...where, status: 'EXPIRED' } }),
+      this.prisma.subscription.count({ where: { ...where, status: 'TRIAL' } }),
+    ]);
+
+    return responseOk('Subscription stats fetched successfully', {
+      total: totalSubscriptions,
+      active: activeCount,
+      expired: expiredCount,
+      trial: trialCount,
+      startDate: startDate || null,
+      endDate: endDate || null,
+    });
+  }
+
+  async getPaymentStats(startDate?: string, endDate?: string) {
+    const now = new Date();
+    let dateFilter: any = {};
+
+    if (startDate) {
+      dateFilter.createdAt = { ...dateFilter.createdAt, gte: new Date(startDate) };
+    }
+    if (endDate) {
+      dateFilter.createdAt = { ...dateFilter.createdAt, lte: new Date(endDate) };
+    }
+
+    const where = Object.keys(dateFilter).length > 0 ? dateFilter : {};
+
+    const [totalPayments, completedCount, totalRevenue] = await Promise.all([
+      this.prisma.payment.count({ where }),
+      this.prisma.payment.count({ where: { ...where, status: 'COMPLETED' } }),
+      this.prisma.payment.aggregate({
+        where: { ...where, status: 'COMPLETED' },
+        _sum: { amount: true },
+      }),
+    ]);
+
+    return responseOk('Payment stats fetched successfully', {
+      total: totalPayments,
+      completed: completedCount,
+      revenue: totalRevenue._sum.amount || 0,
+      startDate: startDate || null,
+      endDate: endDate || null,
+    });
+  }
+
+  async getGrowthData() {
+    const now = new Date();
+    const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+
+    const subscriptions = await this.prisma.subscription.findMany({
+      where: { createdAt: { gte: twelveMonthsAgo } },
+      select: { createdAt: true, status: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const payments = await this.prisma.payment.findMany({
+      where: { createdAt: { gte: twelveMonthsAgo }, status: 'COMPLETED' },
+      select: { createdAt: true, amount: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const monthlyData: Record<string, { subscriptions: number; revenue: number }> = {};
+
+    for (let i = 11; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      monthlyData[key] = { subscriptions: 0, revenue: 0 };
+    }
+
+    subscriptions.forEach((sub) => {
+      const date = new Date(sub.createdAt);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      if (monthlyData[key]) {
+        monthlyData[key].subscriptions++;
+      }
+    });
+
+    payments.forEach((payment) => {
+      const date = new Date(payment.createdAt);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      if (monthlyData[key]) {
+        monthlyData[key].revenue += payment.amount;
+      }
+    });
+
+    const labels = Object.keys(monthlyData);
+    const subscriptionData = labels.map((label) => monthlyData[label].subscriptions);
+    const revenueData = labels.map((label) => monthlyData[label].revenue);
+
+    return responseOk('Growth data fetched successfully', {
+      labels,
+      subscriptionData,
+      revenueData,
+    });
   }
 
   async getSuspiciousActivity() {

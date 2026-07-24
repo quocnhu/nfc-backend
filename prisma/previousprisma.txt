@@ -1,0 +1,171 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("POSTGRES_PRISMA_URL")
+  directUrl = env("POSTGRES_URL_NON_POOLING")
+}
+
+model User {
+  id              String             @id @default(uuid())
+  email           String             @unique
+  fullname        String
+  password        String
+  avatarUrl       String?
+  isEmailVerified Boolean            @default(false)
+  roleId          String
+  role            Role               @relation(fields: [roleId], references: [id])
+  userPermissions UserPermission[]
+  sharingContent  SharingContent[]
+  histories       History[]
+  qrCodes         QRCode[]
+  payments        Payment[]
+  createdBy       String?
+  creator         User?              @relation("UserCreator", fields: [createdBy], references: [id])
+  createdUsers    User[]             @relation("UserCreator")
+  createdRoles    Role[]             @relation("RoleCreator")
+  createdPermissions Permission[]    @relation("PermissionCreator")
+  createdSharingContent SharingContent[] @relation("SharingContentCreator")
+  refreshTokens         RefreshToken[]
+  failedLoginCount      Int                @default(0)
+  lockedUntil           DateTime?
+  status              UserStatus         @default(ACTIVE)
+  expiresAt           DateTime?
+}
+
+model Role {
+  id          String       @id @default(uuid())
+  name        String       @unique
+  permissions Permission[]
+  users       User[]
+  createdBy   String?
+  creator     User?        @relation("RoleCreator", fields: [createdBy], references: [id])
+}
+
+model Permission {
+  id              String           @id @default(uuid())
+  name            String           @unique
+  roles           Role[]
+  userPermissions UserPermission[]
+  createdBy       String?
+  creator         User?            @relation("PermissionCreator", fields: [createdBy], references: [id])
+}
+
+model UserPermission {
+  id           String     @id @default(uuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permissionId])
+}
+
+model EmailVerification {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  token     String
+  expiresAt DateTime
+}
+
+model PasswordReset {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  token     String
+  expiresAt DateTime
+}
+
+model SharingContent {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  url         String
+  itemName    String
+  icon        String
+  createdBy   String?
+  creator     User?    @relation("SharingContentCreator", fields: [createdBy], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model History {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action     String
+  entityId   String?
+  entityType String?
+  details    String?
+  ipAddress  String?
+  userAgent  String?
+  timestamp  DateTime @default(now())
+}
+
+model LoginAttempt {
+  id        String   @id @default(uuid())
+  email     String
+  ip        String?
+  userAgent String?
+  success   Boolean
+  reason    String?
+  timestamp DateTime @default(now())
+
+  @@index([email, timestamp])
+  @@index([ip, timestamp])
+}
+
+model Folder {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  displayName String
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+model QRCode {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  url       String
+  createdAt DateTime @default(now())
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Payment {
+  id              String        @id @default(uuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount          Float
+  currency        String        @default("USD")
+  paypalOrderId   String?       @unique
+  paypalPayerId   String?
+  status          PaymentStatus @default(PENDING)
+  durationDays    Int           @default(365)
+  expiresAt       DateTime
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}

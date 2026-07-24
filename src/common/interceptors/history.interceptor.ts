@@ -5,7 +5,7 @@ import {
   CallHandler,
 } from '@nestjs/common';
 import { Observable, tap } from 'rxjs';
-import { HistoryService } from '../../history/history.service';
+import { HistoryService } from '@/history/history.service';
 
 /**
  * METHOD_ACTION_MAP — Maps HTTP methods to CRUD action names.

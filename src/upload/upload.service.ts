@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { PrismaService } from '../database/prisma/prisma.service';
-import { SupabaseConfig } from '../config/supabase.config';
-import { responseOk, responseCreated } from '../common/helpers/response.helper';
+import { PrismaService } from '@/database/prisma/prisma.service';
+import { SupabaseConfig } from '@/config/supabase.config';
+import { responseOk, responseCreated } from '@/common/helpers/response.helper';
 import { Readable } from 'stream';
 
 // sharp 0.35+ ships ESM types only; use require for CJS compatibility
@@ -671,23 +671,32 @@ export class UploadService {
   /**
    * createUserdataFolder — Create a subfolder inside userdata/{userId}/{path}/
    * by uploading a .keep placeholder file.
+   * System folders (avatar, icon) cannot be created or modified by anyone.
    */
   async createUserdataFolder(userId: string, folderName: string, currentPath?: string) {
     const sanitized = folderName.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
     if (!sanitized || sanitized.length < 1) {
       throw new BadRequestException('Invalid folder name');
     }
-    if (sanitized === 'avatar' || sanitized === 'icon' || sanitized === '.keep') {
-      throw new BadRequestException('This folder name is reserved');
+    
+    // Block creation of system folders
+    const systemFolders = ['avatar', 'icon', '.keep'];
+    if (systemFolders.includes(sanitized)) {
+      throw new ForbiddenException('This folder name is reserved for system use');
     }
+    
     if (sanitized.includes('..') || sanitized.includes('/') || sanitized.includes('\\')) {
       throw new BadRequestException('Invalid folder name');
     }
 
-    // Prevent creating folders inside the avatar folder (except for admins)
-    const userIsAdmin = await this.isAdmin(userId);
-    if (!userIsAdmin && currentPath && currentPath.startsWith('avatar')) {
-      throw new BadRequestException('Cannot create folders inside the avatar folder');
+    // Prevent creating folders inside system folders (avatar, icon) - even for admins
+    if (currentPath) {
+      const pathSegments = currentPath.split('/');
+      for (const segment of pathSegments) {
+        if (systemFolders.includes(segment)) {
+          throw new ForbiddenException(`Cannot create folders inside system folder: ${segment}`);
+        }
+      }
     }
 
     const userFolder = await this.getUserFolder(userId);
@@ -724,13 +733,22 @@ export class UploadService {
 
   /**
    * deleteUserdataFolder — Delete a subfolder and all its contents.
+   * System folders (avatar, icon) cannot be deleted by anyone, including admins.
    */
   async deleteUserdataFolder(userId: string, folderPath: string) {
     if (!folderPath || folderPath.includes('..') || folderPath.includes('\\')) {
       throw new BadRequestException('Invalid folder path');
     }
-    if (folderPath === 'avatar' || folderPath === 'icon') {
-      throw new BadRequestException('Cannot delete the system folder');
+
+    // Block deletion of system folders - check both exact match and path segments
+    const systemFolders = ['avatar', 'icon', '.keep'];
+    const pathSegments = folderPath.split('/');
+    
+    // Check if any segment in the path is a system folder
+    for (const segment of pathSegments) {
+      if (systemFolders.includes(segment)) {
+        throw new ForbiddenException(`Cannot delete system folder: ${segment}`);
+      }
     }
 
     const userFolder = await this.getUserFolder(userId);
@@ -760,17 +778,27 @@ export class UploadService {
   /**
    * deleteUserdataFile — Delete a file from userdata/{userId}/
    * - User can only delete their own files
-   * - If deleting avatar, also clear User.avatarUrl
+   * - Cannot delete files from system folders (avatar, icon)
    */
   async deleteUserdataFile(userId: string, filename: string, subPath?: string) {
     this.validateFilename(filename);
+
+    // Block deletion of files from system folders
+    const systemFolders = ['avatar', 'icon', '.keep'];
+    if (subPath) {
+      const pathSegments = subPath.split('/');
+      for (const segment of pathSegments) {
+        if (systemFolders.includes(segment)) {
+          throw new ForbiddenException(`Cannot delete files from system folder: ${segment}`);
+        }
+      }
+    }
 
     const userFolder = await this.getUserFolder(userId);
 
     // Build full path
     const basePath = subPath ? `userdata/${userFolder}/${subPath}` : `userdata/${userFolder}`;
     const filePath = `${basePath}/${filename}`;
-    const isAvatar = basePath.endsWith('/avatar');
 
     // Verify file exists
     const { data } = await this.supabase.storage
@@ -784,14 +812,6 @@ export class UploadService {
     const { error } = await this.supabase.storage.from(BUCKET_NAME).remove([filePath]);
     if (error) {
       throw new BadRequestException(`Delete failed: ${error.message}`);
-    }
-
-    // If avatar deleted, clear avatarUrl
-    if (isAvatar) {
-      await this.prisma.user.update({
-        where: { id: userId },
-        data: { avatarUrl: null },
-      });
     }
 
     return responseOk('File deleted successfully');

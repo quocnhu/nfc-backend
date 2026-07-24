@@ -8,10 +8,10 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { UserService } from './user.service';
-import { CreateUserDto, UpdateUserDto, DeleteUserDto, ChangePasswordDto, AssignPermissionsDto, AdminChangePasswordDto, UnlockUserDto } from './dto/user.dto';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { PrismaService } from '../database/prisma/prisma.service';
+import { UserService } from '@/user/user.service';
+import { CreateUserDto, UpdateUserDto, DeleteUserDto, ChangePasswordDto, AssignPermissionsDto, AdminChangePasswordDto, UnlockUserDto, ToggleStatusDto } from '@/user/dto/user.dto';
+import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { PrismaService } from '@/database/prisma/prisma.service';
 
 @Controller('user')
 export class UserSelfController {
@@ -159,6 +159,12 @@ export class UserController {
   @HttpCode(HttpStatus.OK)
   verifyEmail(@Body() dto: { id: string }) {
     return this.userService.verifyEmail(dto.id);
+  }
+
+  @Post('toggle-status')
+  @HttpCode(HttpStatus.OK)
+  toggleStatus(@Body() dto: ToggleStatusDto) {
+    return this.userService.toggleStatus(dto.id);
   }
 
   /**

@@ -4,9 +4,9 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
-import { PrismaService } from '../database/prisma/prisma.service';
-import { CreatePermissionDto, UpdatePermissionDto } from './dto/permission.dto';
-import { responseOk, responseCreated } from '../common/helpers/response.helper';
+import { PrismaService } from '@/database/prisma/prisma.service';
+import { CreatePermissionDto, UpdatePermissionDto } from '@/permission/dto/permission.dto';
+import { responseOk, responseCreated } from '@/common/helpers/response.helper';
 
 @Injectable()
 export class PermissionService {

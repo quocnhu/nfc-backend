@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
-import { PrismaService } from '../database/prisma/prisma.service';
-import { responseOk, responseCreated } from '../common/helpers/response.helper';
-import { CreateQRDto } from './dto/qr.dto';
+import { PrismaService } from '@/database/prisma/prisma.service';
+import { responseOk, responseCreated } from '@/common/helpers/response.helper';
+import { CreateQRDto } from '@/qr/dto/qr.dto';
 
 @Injectable()
 export class QRService {

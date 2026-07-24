@@ -16,9 +16,9 @@ import {
 import { FilesInterceptor, FileInterceptor } from '@nestjs/platform-express';
 import * as multer from 'multer';
 import { Response } from 'express';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { Public } from '../common/decorators/public.decorator';
-import { UploadService } from './upload.service';
+import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { Public } from '@/common/decorators/public.decorator';
+import { UploadService } from '@/upload/upload.service';
 
 /**
  * UploadController — Handles file uploads to Supabase Storage.

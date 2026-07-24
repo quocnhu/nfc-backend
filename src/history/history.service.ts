@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../database/prisma/prisma.service';
-import { responseOk } from '../common/helpers/response.helper';
+import { PrismaService } from '@/database/prisma/prisma.service';
+import { responseOk } from '@/common/helpers/response.helper';
 
 @Injectable()
 export class HistoryService {

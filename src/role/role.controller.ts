@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
-import { RoleService } from './role.service';
-import { CreateRoleDto, UpdateRoleDto, DeleteRoleDto } from './dto/role.dto';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { RoleService } from '@/role/role.service';
+import { CreateRoleDto, UpdateRoleDto, DeleteRoleDto } from '@/role/dto/role.dto';
+import { CurrentUser } from '@/common/decorators/current-user.decorator';
 
 @Controller('roles')
 export class RoleController {

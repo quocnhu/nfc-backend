@@ -6,13 +6,16 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  Param,
+  Res,
 } from '@nestjs/common';
-import { SharingContentService } from './sharing-content.service';
-import { CreateSharingContentDto } from './dto/create-sharing-content.dto';
-import { UpdateSharingContentDto, DeleteSharingContentDto, GetSharingContentDto } from './dto/update-sharing-content.dto';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { Public } from '../common/decorators/public.decorator';
-import { PrismaService } from '../database/prisma/prisma.service';
+import { Response } from 'express';
+import { SharingContentService } from '@/sharing-content/sharing-content.service';
+import { CreateSharingContentDto } from '@/sharing-content/dto/create-sharing-content.dto';
+import { UpdateSharingContentDto, DeleteSharingContentDto, GetSharingContentDto } from '@/sharing-content/dto/update-sharing-content.dto';
+import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { Public } from '@/common/decorators/public.decorator';
+import { PrismaService } from '@/database/prisma/prisma.service';
 
 @Controller('sharing-content')
 export class SharingContentController {
@@ -34,6 +37,17 @@ export class SharingContentController {
   @HttpCode(HttpStatus.OK)
   findPublicByUser(@Query('userId') userId: string) {
     return this.sharingContentService.findPublicByUser(userId);
+  }
+
+  /**
+   * GET /sharing-content/icon/:iconName — Proxy icon files from storage.
+   * Prevents exposing Supabase URLs directly to the frontend.
+   * Public endpoint so icons can be displayed on public profiles.
+   */
+  @Public()
+  @Get('icon/:iconName')
+  async getIcon(@Param('iconName') iconName: string, @Res() res: Response) {
+    return this.sharingContentService.getIcon(iconName, res);
   }
 
   // ─── Self-service routes (any authenticated user) ───

@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { PrismaService } from '../database/prisma/prisma.service';
-import { SupabaseConfig } from '../config/supabase.config';
+import { Injectable, NotFoundException, ForbiddenException, StreamableFile } from '@nestjs/common';
+import { PrismaService } from '@/database/prisma/prisma.service';
+import { SupabaseConfig } from '@/config/supabase.config';
 import { ConfigService } from '@nestjs/config';
-import { CreateSharingContentDto } from './dto/create-sharing-content.dto';
-import { UpdateSharingContentDto } from './dto/update-sharing-content.dto';
-import { responseOk, responseCreated } from '../common/helpers/response.helper';
+import { CreateSharingContentDto } from '@/sharing-content/dto/create-sharing-content.dto';
+import { UpdateSharingContentDto } from '@/sharing-content/dto/update-sharing-content.dto';
+import { responseOk, responseCreated } from '@/common/helpers/response.helper';
+import { Response } from 'express';
 
 const BUCKET_NAME = 'foldersupabase';
 
@@ -44,13 +45,7 @@ export class SharingContentService {
     return `${sanitized}_${userId}_${role}`;
   }
 
-  /**
-   * create — Create a new sharing content item.
-   * Admin can assign to any user via targetUserId.
-   * Non-admin can only create for themselves.
-   */
   async create(userId: string, dto: CreateSharingContentDto, hasReadAll: boolean = false) {
-    // Admin can assign to a target user, non-admin always uses their own userId
     const assignToUser = hasReadAll && dto.targetUserId ? dto.targetUserId : userId;
 
     const content = await this.prisma.sharingContent.create({
@@ -70,10 +65,6 @@ export class SharingContentService {
     return responseCreated('Sharing content created successfully', content);
   }
 
-  /**
-   * findAll — Get sharing content items.
-   * If hasReadAll is false, returns only the current user's items.
-   */
   async findAll(currentUserId?: string, hasReadAll: boolean = false) {
     const where = !hasReadAll && currentUserId
       ? { userId: currentUserId }
@@ -91,10 +82,6 @@ export class SharingContentService {
     return responseOk('Sharing contents fetched successfully', contents);
   }
 
-  /**
-   * findByUser — Get all sharing content items for a specific user.
-   * Used for the "My Content" view — only returns the user's own items.
-   */
   async findByUser(userId: string) {
     const contents = await this.prisma.sharingContent.findMany({
       where: { userId },
@@ -104,11 +91,6 @@ export class SharingContentService {
     return responseOk('Your sharing contents fetched successfully', contents);
   }
 
-  /**
-   * findOne — Get a single sharing content item by its ID.
-   * Includes user info (id, fullname, email) of the content owner.
-   * Throws 404 if the item doesn't exist.
-   */
   async findOne(id: string) {
     const content = await this.prisma.sharingContent.findUnique({
       where: { id },
@@ -118,12 +100,59 @@ export class SharingContentService {
     return responseOk('Sharing content fetched successfully', content);
   }
 
-  /**
-   * findPublicByUser — Get a user's public profile + all their sharing content.
-   * Used by the NFC card tap flow: frontend sends userId, backend returns
-   * the user's name, avatar, and all their sharing content items with icon URLs.
-   * Throws 404 if user not found.
-   */
+  async getIcon(iconName: string, res: Response) {
+    const adminUser = await this.prisma.user.findFirst({
+      where: { role: { name: 'ADMIN' } },
+      select: { id: true },
+    });
+
+    if (!adminUser) {
+      throw new NotFoundException('Admin user not found');
+    }
+
+    const adminFolder = await this.getUserFolder(adminUser.id);
+    const iconPath = `userdata/${adminFolder}/icon`;
+
+    const possibleExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.svg'];
+    let filePath = '';
+
+    for (const ext of possibleExtensions) {
+      const testPath = `${iconPath}/${iconName}${ext}`;
+      const { data } = await this.supabase.storage
+        .from(BUCKET_NAME)
+        .list(iconPath, { search: `${iconName}${ext}` });
+
+      if (data && data.some(file => file.name === `${iconName}${ext}`)) {
+        filePath = testPath;
+        break;
+      }
+    }
+
+    if (!filePath) {
+      throw new NotFoundException('Icon not found');
+    }
+
+    const { data, error } = await this.supabase.storage
+      .from(BUCKET_NAME)
+      .download(filePath);
+
+    if (error || !data) {
+      throw new NotFoundException('Icon not found');
+    }
+
+    const buffer = Buffer.from(await data.arrayBuffer());
+    const ext = filePath.split('.').pop()?.toLowerCase() || '';
+    const mimeMap: Record<string, string> = {
+      jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+      webp: 'image/webp', svg: 'image/svg+xml',
+    };
+    const contentType = mimeMap[ext] || 'application/octet-stream';
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
+    res.send(buffer);
+  }
+
   async findPublicByUser(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -132,7 +161,15 @@ export class SharingContentService {
         fullname: true,
         email: true,
         avatarUrl: true,
+        status: true,
+        expiresAt: true,
         role: { select: { id: true, name: true } },
+        subscriptions: {
+          where: { isCurrent: true },
+          take: 1,
+          include: { plan: true },
+          orderBy: { createdAt: 'desc' },
+        },
         sharingContent: {
           select: {
             id: true,
@@ -149,7 +186,26 @@ export class SharingContentService {
     if (!user) throw new NotFoundException('User not found');
     if (user.role?.name === 'ADMIN') throw new NotFoundException('User not found');
 
-    // Get admin user to find icon folder path
+    const currentSub = user.subscriptions[0];
+    const isExpired = user.expiresAt && new Date(user.expiresAt) < new Date();
+    const isSubExpired = currentSub && new Date(currentSub.endDate) < new Date();
+
+    if (user.status === 'INACTIVE' || user.status === 'BLOCKED' || isExpired || isSubExpired) {
+      throw new ForbiddenException('NFC_EXPIRED');
+    }
+
+    try {
+      await this.prisma.history.create({
+        data: {
+          userId,
+          action: 'read:publicview',
+          entityType: 'publicview',
+          entityId: userId,
+          details: `Public profile viewed`,
+        },
+      });
+    } catch {}
+
     const adminUser = await this.prisma.user.findFirst({
       where: { role: { name: 'ADMIN' } },
       select: { id: true },
@@ -165,22 +221,23 @@ export class SharingContentService {
       }
     }
 
-    // Build sharing content with icon URLs
+    let iconFiles: string[] = [];
+    if (adminIconFolder) {
+      const { data } = await this.supabase.storage.from(BUCKET_NAME).list(adminIconFolder);
+      if (data) {
+        iconFiles = data.map(file => file.name);
+      }
+    }
+
     const sharingContentWithIcons = user.sharingContent.map((item) => {
       let iconUrl = '';
-      if (adminIconFolder && item.icon) {
-        // Try to find the icon file in admin's icon folder
-        const possibleExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
-        for (const ext of possibleExtensions) {
-          const iconPath = `${adminIconFolder}/${item.icon}${ext}`;
-          iconUrl = this.getPublicUrl(iconPath);
-          break; // Use first match (jpg is most common after processing)
+      if (iconFiles.length > 0 && item.icon) {
+        const matchedFile = iconFiles.find(f => f.startsWith(`${item.icon}.`));
+        if (matchedFile) {
+          iconUrl = `/sharing-content/icon/${item.icon}`;
         }
       }
-      return {
-        ...item,
-        iconUrl,
-      };
+      return { ...item, iconUrl };
     });
 
     const result = {
@@ -189,16 +246,17 @@ export class SharingContentService {
       email: user.email,
       avatarUrl: user.avatarUrl,
       role: user.role,
+      subscription: currentSub ? {
+        plan: currentSub.plan,
+        status: currentSub.status,
+        endDate: currentSub.endDate,
+      } : null,
       sharingContent: sharingContentWithIcons,
     };
 
     return responseOk('Public profile fetched successfully', result);
   }
 
-  /**
-   * update — Update a sharing content item.
-   * Admin (hasReadAll) can update any item. Others can only update their own.
-   */
   async update(id: string, userId: string, dto: UpdateSharingContentDto, hasReadAll: boolean = false) {
     const content = await this.prisma.sharingContent.findUnique({ where: { id } });
     if (!content) throw new NotFoundException('Sharing content not found');
@@ -213,10 +271,6 @@ export class SharingContentService {
     return responseOk('Sharing content updated successfully', updated);
   }
 
-  /**
-   * remove — Delete a sharing content item.
-   * Admin (hasReadAll) can delete any item. Others can only delete their own.
-   */
   async remove(id: string, userId: string, hasReadAll: boolean = false) {
     const content = await this.prisma.sharingContent.findUnique({ where: { id } });
     if (!content) throw new NotFoundException('Sharing content not found');

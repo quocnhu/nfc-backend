@@ -8,9 +8,9 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { QRService } from './qr.service';
-import { CreateQRDto } from './dto/qr.dto';
+import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { QRService } from '@/qr/qr.service';
+import { CreateQRDto } from '@/qr/dto/qr.dto';
 
 /**
  * QRController — CRUD for user QR codes.

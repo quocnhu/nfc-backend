@@ -1,14 +1,14 @@
 import { Injectable, ForbiddenException, BadRequestException, UnauthorizedException } from '@nestjs/common';
-import { PrismaService } from '../database/prisma/prisma.service';
+import { PrismaService } from '@/database/prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
-import { SignupDto } from './dto/signup.dto';
-import { SigninDto } from './dto/signin.dto';
-import { RequestResetDto, ResetPasswordDto } from './dto/reset-password.dto';
+import { SignupDto } from '@/auth/dto/signup.dto';
+import { SigninDto } from '@/auth/dto/signin.dto';
+import { RequestResetDto, ResetPasswordDto } from '@/auth/dto/reset-password.dto';
 import * as crypto from 'crypto';
-import { responseCreated, responseOk } from '../common/helpers/response.helper';
+import { responseCreated, responseOk } from '@/common/helpers/response.helper';
 
 const REFRESH_TOKEN_EXPIRY_DAYS = 7;
 
@@ -65,9 +65,26 @@ export class AuthService {
           connect: { name: 'USER' },
         },
         status: 'ACTIVE',
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes trial
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
       },
     });
+
+    const freePlan = await this.prisma.plan.findUnique({ where: { name: 'FREE' } });
+    if (freePlan) {
+      const now = new Date();
+      const endDate = new Date(now.getTime() + 30 * 60 * 1000);
+
+      await this.prisma.subscription.create({
+        data: {
+          userId: user.id,
+          planId: freePlan.id,
+          status: 'TRIAL',
+          startDate: now,
+          endDate,
+          isCurrent: true,
+        },
+      });
+    }
 
     const verificationToken = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -187,14 +204,14 @@ export class AuthService {
 
     await this.prisma.user.update({
       where: { email },
-      data: { isEmailVerified: true },
+      data: { isEmailVerified: true, status: 'ACTIVE' },
     });
 
     await this.prisma.emailVerification.delete({
       where: { email },
     });
 
-    return responseOk('Email verified successfully. You can now login.');
+    return responseOk('Email verified successfully. Your account is now active.');
   }
 
   async resendVerificationEmail(email: string) {
@@ -310,19 +327,11 @@ export class AuthService {
       throw new ForbiddenException('Please verify your email before logging in');
     }
 
-    // Check if account is disabled
-    if (user.status === 'DISABLED') {
-      await this.recordLoginAttempt(dto.email, false, 'account_disabled', ip, userAgent);
-      throw new ForbiddenException('Your account has been disabled. Please contact admin or renew your NFC service.');
+    if (user.status === 'INACTIVE') {
+      await this.recordLoginAttempt(dto.email, false, 'account_inactive', ip, userAgent);
+      throw new ForbiddenException('Your account is inactive. Please contact an administrator.');
     }
 
-    // Check if account has expired
-    if (user.expiresAt && user.expiresAt < new Date()) {
-      await this.recordLoginAttempt(dto.email, false, 'account_expired', ip, userAgent);
-      throw new ForbiddenException('Your NFC service has expired. Please login to renew.');
-    }
-
-    // Check if account is locked
     if (user.lockedUntil && user.lockedUntil > new Date()) {
       const remainingMs = user.lockedUntil.getTime() - Date.now();
       const remainingMin = Math.ceil(remainingMs / 60000);
@@ -367,6 +376,8 @@ export class AuthService {
       data: {
         access_token: accessToken.access_token,
         refresh_token: refreshToken,
+        status: user.status,
+        expiresAt: user.expiresAt,
       },
     };
   }

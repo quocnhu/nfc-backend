@@ -1,11 +1,12 @@
 import { Body, Controller, Get, Post, HttpCode, HttpStatus, Res, Req } from '@nestjs/common';
 import { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
-import { AuthService } from './auth.service';
-import { SignupDto } from './dto/signup.dto';
-import { SigninDto } from './dto/signin.dto';
-import { RequestResetDto, ResetPasswordDto } from './dto/reset-password.dto';
-import { Public } from '../common/decorators/public.decorator';
+import { AuthService } from '@/auth/auth.service';
+import { SignupDto } from '@/auth/dto/signup.dto';
+import { SigninDto } from '@/auth/dto/signin.dto';
+import { RequestResetDto, ResetPasswordDto } from '@/auth/dto/reset-password.dto';
+import { Public } from '@/common/decorators/public.decorator';
+import { SkipSubscription } from '@/common/decorators/skip-subscription.decorator';
 
 const ACCESS_COOKIE_MAX_AGE = 15 * 60 * 1000;
 const REFRESH_COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
@@ -132,6 +133,7 @@ export class AuthController {
     return this.authService.resendVerificationEmail(dto.email);
   }
 
+  @SkipSubscription()
   @HttpCode(HttpStatus.OK)
   @Post('logout')
   async logout(
