@@ -47,6 +47,6 @@ export class PermissionHelper {
 
   async isAdmin(userId: string): Promise<boolean> {
     const { role } = await this.getUserPermissions(userId);
-    return role === 'ADMIN';
+    return role?.toUpperCase() === 'ADMIN';
   }
 }

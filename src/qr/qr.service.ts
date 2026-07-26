@@ -67,4 +67,23 @@ export class QRService {
 
     return responseOk('QR code deleted successfully');
   }
+
+  async bulkDeleteQR(userId: string, ids: string[]) {
+    if (!ids.length) throw new NotFoundException('No IDs provided');
+
+    const qrCodes = await this.prisma.qRCode.findMany({
+      where: { id: { in: ids } },
+    });
+
+    const forbidden = qrCodes.filter(qr => qr.userId !== userId);
+    if (forbidden.length) {
+      throw new ForbiddenException('You can only delete your own QR codes');
+    }
+
+    await this.prisma.qRCode.deleteMany({
+      where: { id: { in: ids } },
+    });
+
+    return responseOk(`${ids.length} QR code(s) deleted successfully`);
+  }
 }

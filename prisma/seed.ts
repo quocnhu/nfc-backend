@@ -70,6 +70,13 @@ async function main() {
   });
   console.log('VIP role: USER perms + history + dashboard + delete sharing');
 
+  const localRole = await prisma.role.upsert({ where: { name: 'LOCAL' }, update: {}, create: { name: 'LOCAL' } });
+  await prisma.role.update({
+    where: { id: localRole.id },
+    data: { permissions: { set: createdPermissions.map((p) => ({ id: p.id })) } },
+  });
+  console.log('LOCAL role: ALL permissions (company users, no subscription required)');
+
   const freePlan = await prisma.plan.upsert({
     where: { name: 'FREE' },
     update: {},

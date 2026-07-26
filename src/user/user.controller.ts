@@ -142,6 +142,16 @@ export class UserController {
   }
 
   /**
+   * POST /users/bulk-delete — Delete multiple users (admin only).
+   * Cannot delete yourself or ADMIN users. Accepts: ids (array of userIds).
+   */
+  @Post('bulk-delete')
+  @HttpCode(HttpStatus.OK)
+  bulkRemove(@CurrentUser('sub') userId: string, @Body() dto: { ids: string[] }) {
+    return this.userService.bulkDelete(dto.ids, userId);
+  }
+
+  /**
    * POST /users/unlock — Unlock a locked user account (admin only).
    * Resets failedLoginCount and lockedUntil to null.
    */

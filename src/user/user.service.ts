@@ -206,17 +206,19 @@ export class UserService {
 
     if (dto.roleId) {
       const role = await this.prisma.role.findUnique({ where: { id: dto.roleId } });
-      isAdminRole = role?.name === 'ADMIN';
+      isAdminRole = role?.name.toUpperCase() === 'ADMIN';
       createData.roleId = dto.roleId;
     } else {
       createData.role = { connect: { name: 'USER' } };
     }
 
-    // Step 4: Set verification and status based on role
-    if (isAdminRole) {
+    // Step 4: Set verification and status based on who created the user
+    // If created by admin, skip verification and set as active
+    if (createdByUserId) {
       createData.isEmailVerified = true;
       createData.status = 'ACTIVE';
     } else {
+      // Self-registered users need verification
       createData.isEmailVerified = false;
       createData.status = 'INACTIVE';
     }
@@ -334,12 +336,33 @@ export class UserService {
 
     if (!user) throw new NotFoundException('User not found');
 
-    if (user.role.name === 'ADMIN') {
+    if (user.role.name.toUpperCase() === 'ADMIN') {
       throw new ForbiddenException('Admin users cannot be deleted');
     }
 
     await this.prisma.user.delete({ where: { id } });
     return responseOk('User deleted successfully');
+  }
+
+  async bulkDelete(ids: string[], currentUserId?: string) {
+    if (!ids.length) throw new NotFoundException('No IDs provided');
+
+    if (currentUserId && ids.includes(currentUserId)) {
+      throw new ForbiddenException('Cannot delete yourself');
+    }
+
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: ids } },
+      include: { role: true },
+    });
+
+    const adminUsers = users.filter(u => u.role.name.toUpperCase() === 'ADMIN');
+    if (adminUsers.length) {
+      throw new ForbiddenException('Admin users cannot be deleted');
+    }
+
+    await this.prisma.user.deleteMany({ where: { id: { in: ids } } });
+    return responseOk(`${ids.length} user(s) deleted successfully`);
   }
 
   /**
@@ -406,7 +429,7 @@ export class UserService {
 
     if (user.roleId) {
       const role = await this.prisma.role.findUnique({ where: { id: user.roleId } });
-      if (role?.name === 'ADMIN') {
+      if (role?.name.toUpperCase() === 'ADMIN') {
         throw new ForbiddenException('Admin status cannot be changed');
       }
     }

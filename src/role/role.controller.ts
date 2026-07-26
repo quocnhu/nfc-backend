@@ -45,4 +45,15 @@ export class RoleController {
   remove(@Body() dto: DeleteRoleDto) {
     return this.roleService.remove(dto.id);
   }
+
+  /**
+   * POST /roles/bulk-delete — Delete multiple roles (admin only).
+   * Cannot delete the ADMIN role.
+   * Cannot delete roles that are assigned to any users.
+   */
+  @Post('bulk-delete')
+  @HttpCode(HttpStatus.OK)
+  bulkRemove(@Body() dto: { ids: string[] }) {
+    return this.roleService.bulkDelete(dto.ids);
+  }
 }

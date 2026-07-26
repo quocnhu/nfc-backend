@@ -77,7 +77,7 @@ export class UploadService {
       where: { id: userId },
       select: { role: { select: { name: true } } },
     });
-    return user?.role?.name === 'ADMIN';
+    return user?.role?.name?.toUpperCase() === 'ADMIN';
   }
 
   /** Validate filename — no path traversal. */

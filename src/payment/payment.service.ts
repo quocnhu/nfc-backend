@@ -126,6 +126,23 @@ export class PaymentService {
     return responseOk('Plan deleted successfully', null);
   }
 
+  async bulkDeletePlans(ids: string[]) {
+    if (!ids.length) throw new NotFoundException('No IDs provided');
+
+    const plans = await this.prisma.plan.findMany({
+      where: { id: { in: ids } },
+      include: { _count: { select: { subscriptions: true } } },
+    });
+
+    const plansWithSubs = plans.filter(p => p._count.subscriptions > 0);
+    if (plansWithSubs.length) {
+      throw new BadRequestException('Cannot delete plans with active subscriptions');
+    }
+
+    await this.prisma.plan.deleteMany({ where: { id: { in: ids } } });
+    return responseOk(`${ids.length} plan(s) deleted successfully`, null);
+  }
+
   async createOrder(userId: string, planId?: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -526,21 +543,21 @@ export class PaymentService {
   async cleanupExpiredSubscriptions() {
     const now = new Date();
 
-    // Find all expired subscriptions that are still marked as current
     const expiredSubscriptions = await this.prisma.subscription.findMany({
       where: {
         isCurrent: true,
         endDate: { lt: now },
       },
       include: {
-        user: true,
+        user: {
+          select: { id: true, fullname: true, email: true, status: true },
+        },
       },
     });
 
-    let cleanedCount = 0;
+    const cleanedUsers: { userId: string; fullname: string; email: string }[] = [];
 
     for (const sub of expiredSubscriptions) {
-      // Mark subscription as expired
       await this.prisma.subscription.update({
         where: { id: sub.id },
         data: {
@@ -549,12 +566,24 @@ export class PaymentService {
         },
       });
 
-      // Don't change user status - keep them ACTIVE so they can login and upgrade
-      // The SubscriptionGuard will handle blocking access to protected features
+      await this.prisma.user.update({
+        where: { id: sub.userId },
+        data: {
+          expiresAt: sub.endDate,
+          status: 'INACTIVE',
+        },
+      });
 
-      cleanedCount++;
+      cleanedUsers.push({
+        userId: sub.userId,
+        fullname: sub.user.fullname,
+        email: sub.user.email,
+      });
     }
 
-    return responseOk('Expired subscriptions cleaned up', { cleanedCount });
+    return responseOk('Expired subscriptions cleaned up', {
+      cleanedCount: cleanedUsers.length,
+      cleanedUsers,
+    });
   }
 }

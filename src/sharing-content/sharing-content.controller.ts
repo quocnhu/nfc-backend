@@ -12,7 +12,7 @@ import {
 import { Response } from 'express';
 import { SharingContentService } from '@/sharing-content/sharing-content.service';
 import { CreateSharingContentDto } from '@/sharing-content/dto/create-sharing-content.dto';
-import { UpdateSharingContentDto, DeleteSharingContentDto, GetSharingContentDto } from '@/sharing-content/dto/update-sharing-content.dto';
+import { UpdateSharingContentDto, DeleteSharingContentDto, GetSharingContentDto, BulkDeleteSharingContentDto } from '@/sharing-content/dto/update-sharing-content.dto';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { Public } from '@/common/decorators/public.decorator';
 import { PrismaService } from '@/database/prisma/prisma.service';
@@ -120,6 +120,17 @@ export class SharingContentController {
   async remove(@CurrentUser('sub') userId: string, @Body() dto: DeleteSharingContentDto) {
     const hasReadAll = await this.checkUserPermission(userId, 'read:sharingcontent:all');
     return this.sharingContentService.remove(dto.id, userId, hasReadAll);
+  }
+
+  /**
+   * POST /sharing-content/bulk-delete — Delete multiple sharing content items.
+   * Admin (read:sharingcontent:all) can delete any. Others can only delete their own.
+   */
+  @Post('bulk-delete')
+  @HttpCode(HttpStatus.OK)
+  async bulkRemove(@CurrentUser('sub') userId: string, @Body() dto: BulkDeleteSharingContentDto) {
+    const hasReadAll = await this.checkUserPermission(userId, 'read:sharingcontent:all');
+    return this.sharingContentService.bulkDelete(dto.ids, userId, hasReadAll);
   }
 
   /**

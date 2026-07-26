@@ -184,7 +184,7 @@ export class SharingContentService {
     });
 
     if (!user) throw new NotFoundException('User not found');
-    if (user.role?.name === 'ADMIN') throw new NotFoundException('User not found');
+    if (user.role?.name?.toUpperCase() === 'ADMIN') throw new NotFoundException('User not found');
 
     const currentSub = user.subscriptions[0];
     const isExpired = user.expiresAt && new Date(user.expiresAt) < new Date();
@@ -206,19 +206,19 @@ export class SharingContentService {
       });
     } catch {}
 
-    const adminUser = await this.prisma.user.findFirst({
-      where: { role: { name: 'ADMIN' } },
-      select: { id: true },
-    });
-
+    // Get admin user to find icon folder (icons are stored in admin's folder)
     let adminIconFolder = '';
-    if (adminUser) {
-      try {
+    try {
+      const adminUser = await this.prisma.user.findFirst({
+        where: { role: { name: 'ADMIN' } },
+        select: { id: true },
+      });
+      if (adminUser) {
         const adminFolder = await this.getUserFolder(adminUser.id);
         adminIconFolder = `userdata/${adminFolder}/icon`;
-      } catch {
-        adminIconFolder = '';
       }
+    } catch {
+      adminIconFolder = '';
     }
 
     let iconFiles: string[] = [];
@@ -234,7 +234,8 @@ export class SharingContentService {
       if (iconFiles.length > 0 && item.icon) {
         const matchedFile = iconFiles.find(f => f.startsWith(`${item.icon}.`));
         if (matchedFile) {
-          iconUrl = `/sharing-content/icon/${item.icon}`;
+          const filePath = `${adminIconFolder}/${matchedFile}`;
+          iconUrl = this.getPublicUrl(filePath);
         }
       }
       return { ...item, iconUrl };
@@ -280,5 +281,20 @@ export class SharingContentService {
     await this.prisma.sharingContent.delete({ where: { id } });
 
     return responseOk('Sharing content deleted successfully');
+  }
+
+  async bulkDelete(ids: string[], userId: string, hasReadAll: boolean = false) {
+    if (!ids.length) throw new NotFoundException('No IDs provided');
+
+    const contents = await this.prisma.sharingContent.findMany({ where: { id: { in: ids } } });
+
+    if (!hasReadAll) {
+      const forbidden = contents.filter(c => c.userId !== userId);
+      if (forbidden.length) throw new ForbiddenException('Not your content');
+    }
+
+    await this.prisma.sharingContent.deleteMany({ where: { id: { in: ids } } });
+
+    return responseOk(`${ids.length} sharing content(s) deleted successfully`);
   }
 }

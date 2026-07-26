@@ -55,4 +55,16 @@ export class QRController {
   ) {
     return this.qrService.deleteQR(userId, id);
   }
+
+  /**
+   * POST /qr/bulk-delete — Delete multiple QR codes.
+   */
+  @Post('bulk-delete')
+  @HttpCode(HttpStatus.OK)
+  bulkDeleteQR(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: { ids: string[] },
+  ) {
+    return this.qrService.bulkDeleteQR(userId, dto.ids);
+  }
 }

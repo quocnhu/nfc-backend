@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR, DiscoveryModule } from '@nestjs/core';
 import { AppController } from '@/app.controller';
 import { AppService } from '@/app.service';
 import { PrismaModule } from '@/database/prisma/prisma.module';
@@ -22,6 +22,7 @@ import { RequestMonitorModule } from '@/request-monitor/request-monitor.module';
 import { PermissionHelperModule } from '@/common/helpers/permission-helper.module';
 import { HistoryInterceptor } from '@/common/interceptors/history.interceptor';
 import { RequestMonitorInterceptor } from '@/common/interceptors/request-monitor.interceptor';
+import { PermissionSyncService } from '@/common/services/permission-sync.service';
 
 /**
  * AppModule — Root module of the application.
@@ -47,6 +48,7 @@ import { RequestMonitorInterceptor } from '@/common/interceptors/request-monitor
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    DiscoveryModule,    // Required for PermissionSyncService
     PrismaModule,       // Database connection (Prisma ORM)
     SupabaseModule,    // Supabase storage client
     PermissionHelperModule, // Permission checking helper (global)
@@ -65,6 +67,7 @@ import { RequestMonitorInterceptor } from '@/common/interceptors/request-monitor
   controllers: [AppController],
   providers: [
     AppService,
+    PermissionSyncService,
     // Global guard: JWT authentication on all routes (skips @Public)
     {
       provide: APP_GUARD,

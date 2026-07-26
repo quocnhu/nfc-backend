@@ -27,19 +27,19 @@ export class RoleService {
    * Sets createdBy to the admin's userId.
    */
   async create(dto: CreateRoleDto, createdByUserId?: string) {
-    // Step 1: Check for duplicate name
+    const normalizedName = dto.name.toUpperCase();
+
     const existing = await this.prisma.role.findUnique({
-      where: { name: dto.name },
+      where: { name: normalizedName },
     });
 
     if (existing) {
       throw new ConflictException('Role name already exists');
     }
 
-    // Step 2: Create the role
     const role = await this.prisma.role.create({
       data: {
-        name: dto.name,
+        name: normalizedName,
         createdBy: createdByUserId || null,
       },
       include: {
@@ -60,32 +60,29 @@ export class RoleService {
    * 6. Re-fetch the role with permissions and return.
    */
   async update(id: string, dto: UpdateRoleDto) {
-    // Step 1: Find the role
     const role = await this.prisma.role.findUnique({ where: { id } });
     if (!role) throw new NotFoundException('Role not found');
 
-    // Step 2: Block ADMIN role modification
-    if (role.name === 'ADMIN') {
+    if (role.name.toUpperCase() === 'ADMIN') {
       throw new ForbiddenException('ADMIN role cannot be modified');
     }
 
-    // Step 3: Check name uniqueness if changing
-    if (dto.name && dto.name !== role.name) {
+    const normalizedName = dto.name?.toUpperCase();
+
+    if (normalizedName && normalizedName !== role.name) {
       const nameTaken = await this.prisma.role.findUnique({
-        where: { name: dto.name },
+        where: { name: normalizedName },
       });
       if (nameTaken) throw new ConflictException('Role name already exists');
     }
 
-    // Step 4: Update the role name
     const updated = await this.prisma.role.update({
       where: { id },
       data: {
-        name: dto.name,
+        name: normalizedName,
       },
     });
 
-    // Step 5: Replace permissions if provided (full-replace strategy)
     if (dto.permissionIds) {
       await this.prisma.role.update({
         where: { id },
@@ -123,7 +120,7 @@ export class RoleService {
     if (!role) throw new NotFoundException('Role not found');
 
     // Step 2: Block ADMIN role deletion
-    if (role.name === 'ADMIN') {
+    if (role.name.toUpperCase() === 'ADMIN') {
       throw new ForbiddenException('ADMIN role cannot be deleted');
     }
 
@@ -136,5 +133,27 @@ export class RoleService {
     await this.prisma.role.delete({ where: { id } });
 
     return responseOk('Role deleted successfully');
+  }
+
+  async bulkDelete(ids: string[]) {
+    if (!ids.length) throw new NotFoundException('No IDs provided');
+
+    const roles = await this.prisma.role.findMany({
+      where: { id: { in: ids } },
+      include: { users: true },
+    });
+
+    const adminRoles = roles.filter(r => r.name.toUpperCase() === 'ADMIN');
+    if (adminRoles.length) {
+      throw new ForbiddenException('ADMIN role cannot be deleted');
+    }
+
+    const rolesWithUsers = roles.filter(r => r.users.length > 0);
+    if (rolesWithUsers.length) {
+      throw new ForbiddenException('Cannot delete roles that are assigned to users');
+    }
+
+    await this.prisma.role.deleteMany({ where: { id: { in: ids } } });
+    return responseOk(`${ids.length} role(s) deleted successfully`);
   }
 }

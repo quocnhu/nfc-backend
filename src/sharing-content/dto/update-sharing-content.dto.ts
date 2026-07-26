@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsUUID } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsUUID, IsArray, ArrayMinSize } from 'class-validator';
 
 /**
  * GetSharingContentDto — Validation for getting a single sharing content item by ID.
@@ -47,4 +47,15 @@ export class UpdateSharingContentDto {
 export class DeleteSharingContentDto {
   @IsUUID()
   id!: string;
+}
+
+/**
+ * BulkDeleteSharingContentDto — Validation for deleting multiple sharing content items.
+ * - ids: Array of UUIDs to delete.
+ */
+export class BulkDeleteSharingContentDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsUUID('4', { each: true })
+  ids!: string[];
 }
