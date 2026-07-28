@@ -1,9 +1,12 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '@/database/prisma/prisma.service';
 import { PaypalConfig } from '@/payment/paypal.config';
 import { ConfigService } from '@nestjs/config';
 import * as paypal from '@paypal/checkout-server-sdk';
 import { responseOk, responseCreated } from '@/common/helpers/response.helper';
+import { DiscoveryService, MetadataScanner, Reflector } from '@nestjs/core';
+import { PATH_METADATA, METHOD_METADATA } from '@nestjs/common/constants';
+import { derivePermission } from '@/common/helpers/permission-derivation';
 
 @Injectable()
 export class PaymentService {
@@ -11,6 +14,9 @@ export class PaymentService {
     private prisma: PrismaService,
     private paypalConfig: PaypalConfig,
     private config: ConfigService,
+    private discoveryService: DiscoveryService,
+    private metadataScanner: MetadataScanner,
+    private reflector: Reflector,
   ) {}
 
   async getPlans() {
@@ -41,8 +47,10 @@ export class PaymentService {
     return responseOk('All plans fetched successfully', plans);
   }
 
-  async createPlan(data: { name: string; displayName: string; description?: string; price: number; currency?: string; durationDays: number; isActive?: boolean; permissionIds?: string[] }) {
-    const existing = await this.prisma.plan.findUnique({ where: { name: data.name } });
+  async createPlan(data: { name: string; displayName: string; description?: string; features?: string[]; price: number; currency?: string; durationDays: number; isActive?: boolean; permissionIds?: string[] }) {
+    const existing = await this.prisma.plan.findFirst({ 
+      where: { name: { mode: 'insensitive', equals: data.name } } 
+    });
     if (existing) {
       throw new BadRequestException('Plan name already exists');
     }
@@ -52,6 +60,7 @@ export class PaymentService {
         name: data.name,
         displayName: data.displayName,
         description: data.description,
+        features: data.features || [],
         price: data.price,
         currency: data.currency || 'USD',
         durationDays: data.durationDays,
@@ -72,14 +81,16 @@ export class PaymentService {
     return responseCreated('Plan created successfully', plan);
   }
 
-  async updatePlan(id: string, data: { name?: string; displayName?: string; description?: string; price?: number; currency?: string; durationDays?: number; isActive?: boolean; permissionIds?: string[] }) {
+  async updatePlan(id: string, data: { name?: string; displayName?: string; description?: string; features?: string[]; price?: number; currency?: string; durationDays?: number; isActive?: boolean; permissionIds?: string[] }) {
     const plan = await this.prisma.plan.findUnique({ where: { id } });
     if (!plan) {
       throw new NotFoundException('Plan not found');
     }
 
-    if (data.name && data.name !== plan.name) {
-      const existing = await this.prisma.plan.findUnique({ where: { name: data.name } });
+    if (data.name && data.name.toUpperCase() !== plan.name.toUpperCase()) {
+      const existing = await this.prisma.plan.findFirst({ 
+        where: { name: { mode: 'insensitive', equals: data.name } } 
+      });
       if (existing) {
         throw new BadRequestException('Plan name already exists');
       }
@@ -94,10 +105,17 @@ export class PaymentService {
       }
     }
 
-    const { permissionIds, ...planData } = data;
+    const { permissionIds, features, ...planData } = data;
+    
+    // Handle features field separately for JSON type
+    const updateData: any = { ...planData };
+    if (features !== undefined) {
+      updateData.features = features;
+    }
+    
     const updated = await this.prisma.plan.update({
       where: { id },
-      data: planData,
+      data: updateData,
       include: {
         planPermissions: {
           include: { permission: true },
@@ -159,10 +177,30 @@ export class PaymentService {
       plan = await this.prisma.plan.findUnique({ where: { name: 'PROPLUS' } });
     }
 
+    // Check if user is trying to downgrade
+    const currentSubscription = await this.prisma.subscription.findFirst({
+      where: { userId, isCurrent: true },
+      include: { plan: true },
+    });
+
+    if (currentSubscription?.plan) {
+      const currentPlanPrice = currentSubscription.plan.price;
+      const targetPlanPrice = plan.price;
+
+      // Prevent downgrade (unless it's the same plan for renewal)
+      if (targetPlanPrice < currentPlanPrice && currentSubscription.plan.id !== plan.id) {
+        throw new BadRequestException(
+          `Cannot downgrade from ${currentSubscription.plan.displayName} to ${plan.displayName}. Please upgrade to a higher tier plan.`
+        );
+      }
+    }
+
     if (!plan || plan.price === 0) {
       if (plan && plan.price === 0) {
         const now = new Date();
-        const endDate = new Date(now.getTime() + 30 * 60 * 1000);
+        // Convert durationDays to milliseconds
+        const durationMs = plan.durationDays * 24 * 60 * 60 * 1000;
+        const endDate = new Date(now.getTime() + durationMs);
 
         await this.prisma.subscription.updateMany({
           where: { userId, isCurrent: true },
@@ -451,8 +489,15 @@ export class PaymentService {
   }
 
   async adminChangePlan(userId: string, planId: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { role: true },
+    });
     if (!user) throw new NotFoundException('User not found');
+
+    if (user.role?.name?.toUpperCase() === 'ADMIN') {
+      throw new ForbiddenException('Cannot change plan for admin users');
+    }
 
     const plan = await this.prisma.plan.findUnique({
       where: { id: planId },
@@ -584,6 +629,131 @@ export class PaymentService {
     return responseOk('Expired subscriptions cleaned up', {
       cleanedCount: cleanedUsers.length,
       cleanedUsers,
+    });
+  }
+
+  async getPlanRoutes() {
+    const routes: Array<{
+      permission: string;
+      method: string;
+      path: string;
+      description: string;
+    }> = [];
+
+    const httpMethodMap: Record<string, string> = {
+      '0': 'GET',
+      '1': 'POST',
+      '2': 'PUT',
+      '3': 'DELETE',
+      '4': 'PATCH',
+    };
+
+    const controllers = this.discoveryService.getControllers();
+
+    for (const wrapper of controllers) {
+      const { instance, metatype } = wrapper;
+      
+      if (!instance || !metatype) continue;
+      if (!Object.getPrototypeOf(instance)) continue;
+
+      const controllerPath = this.reflector.get<string>(PATH_METADATA, metatype) || '';
+      const prototype = Object.getPrototypeOf(instance);
+      const methodNames = this.metadataScanner.getAllMethodNames(prototype);
+
+      for (const methodName of methodNames) {
+        const handler = prototype[methodName];
+        
+        const routePath = this.reflector.get<string>(PATH_METADATA, handler);
+        const routeMethod = this.reflector.get<string>(METHOD_METADATA, handler);
+
+        if (routePath && routeMethod) {
+          // Handle empty routePath, leading slashes, and ensure proper formatting
+          const cleanRoutePath = routePath.startsWith('/') ? routePath.slice(1) : routePath;
+          const normalizedRoutePath = cleanRoutePath === '' ? '' : `/${cleanRoutePath}`;
+          const fullPath = controllerPath ? `/${controllerPath}${normalizedRoutePath}` : (cleanRoutePath === '' ? '/' : `/${cleanRoutePath}`);
+          const method = httpMethodMap[routeMethod] || 'GET';
+          
+          // Now pass the actual HTTP method string to derivePermission
+          const permission = derivePermission(metatype, method, fullPath);
+          const description = `${method} ${fullPath}`;
+          
+          routes.push({
+            permission,
+            method,
+            path: fullPath,
+            description,
+          });
+        }
+      }
+    }
+
+    const uniqueRoutes = routes.filter((route, index, self) =>
+      index === self.findIndex(r => r.permission === route.permission && r.path === route.path)
+    );
+
+    // Get all unique permissions from routes
+    const uniquePermissions = [...new Set(uniqueRoutes.map(r => r.permission))];
+
+    // Ensure all permissions exist in database
+    const existingPermissions = await this.prisma.permission.findMany({
+      where: { name: { in: uniquePermissions } },
+      select: { id: true, name: true },
+    });
+
+    const existingPermNames = new Set(existingPermissions.map(p => p.name));
+    const missingPermissions = uniquePermissions.filter(p => !existingPermNames.has(p));
+
+    // Create missing permissions
+    if (missingPermissions.length > 0) {
+      await this.prisma.permission.createMany({
+        data: missingPermissions.map(name => ({ name })),
+        skipDuplicates: true,
+      });
+    }
+
+    // Fetch all permissions again (including newly created ones)
+    const allPermissions = await this.prisma.permission.findMany({
+      select: { id: true, name: true },
+    });
+
+    const permissionIdMap = new Map<string, string>();
+    for (const perm of allPermissions) {
+      permissionIdMap.set(perm.name, perm.id);
+    }
+
+    const plans = await this.prisma.plan.findMany({
+      include: {
+        planPermissions: {
+          include: { permission: true },
+        },
+      },
+      orderBy: { price: 'asc' },
+    });
+
+    const planPermissionMap = new Map<string, Set<string>>();
+    for (const plan of plans) {
+      const permSet = new Set(plan.planPermissions.map(pp => pp.permission.name));
+      planPermissionMap.set(plan.id, permSet);
+    }
+
+    const result = uniqueRoutes.map(route => ({
+      ...route,
+      permissionId: permissionIdMap.get(route.permission) || null,
+      plans: plans.map(plan => ({
+        id: plan.id,
+        name: plan.name,
+        displayName: plan.displayName,
+        hasPermission: planPermissionMap.get(plan.id)?.has(route.permission) || false,
+      })),
+    }));
+
+    return responseOk('Plan routes fetched successfully', {
+      routes: result,
+      plans: plans.map(p => ({
+        id: p.id,
+        name: p.name,
+        displayName: p.displayName,
+      })),
     });
   }
 }

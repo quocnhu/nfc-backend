@@ -117,8 +117,8 @@ export class UserController {
    */
   @Post('assign-permissions')
   @HttpCode(HttpStatus.OK)
-  assignPermissions(@Body() dto: AssignPermissionsDto) {
-    return this.userService.assignPermissions(dto.id, dto);
+  assignPermissions(@CurrentUser('sub') userId: string, @Body() dto: AssignPermissionsDto) {
+    return this.userService.assignPermissions(dto.id, dto, userId);
   }
 
   /**

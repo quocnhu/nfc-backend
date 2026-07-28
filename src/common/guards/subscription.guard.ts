@@ -8,6 +8,7 @@ import { Reflector } from '@nestjs/core';
 import { PrismaService } from '@/database/prisma/prisma.service';
 import { IS_PUBLIC_KEY } from '@/common/decorators/public.decorator';
 import { SKIP_SUBSCRIPTION_KEY } from '@/common/decorators/skip-subscription.decorator';
+import { IS_PUBLIC_WITH_SUBSCRIPTION_KEY } from '@/common/decorators/public-with-subscription.decorator';
 import { PermissionHelper } from '@/common/helpers/permission.helper';
 import { derivePermission } from '@/common/helpers/permission-derivation';
 
@@ -32,6 +33,11 @@ export class SubscriptionGuard implements CanActivate {
       return true;
     }
 
+    const isPublicWithSubscription = this.reflector.getAllAndOverride<boolean>(
+      IS_PUBLIC_WITH_SUBSCRIPTION_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
     const skipSubscription = this.reflector.getAllAndOverride<boolean>(
       SKIP_SUBSCRIPTION_KEY,
       [context.getHandler(), context.getClass()],
@@ -43,6 +49,14 @@ export class SubscriptionGuard implements CanActivate {
     }
 
     const user = request.user;
+    
+    // If route is @PublicWithSubscription() and no user is authenticated, allow access
+    if (isPublicWithSubscription && !user) {
+      request.subscriptionStatus = 'PUBLIC_ANONYMOUS';
+      request.planName = 'ANONYMOUS';
+      return true;
+    }
+    
     if (!user) return false;
 
     if (await this.permissionHelper.isAdmin(user.sub)) {
@@ -72,8 +86,19 @@ export class SubscriptionGuard implements CanActivate {
 
     const currentUser = await this.prisma.user.findUnique({
       where: { id: user.sub },
-      select: { createdBy: true },
+      select: { 
+        createdBy: true,
+        role: {
+          select: { name: true }
+        }
+      },
     });
+
+    if (currentUser?.role?.name === 'VIP') {
+      request.subscriptionStatus = 'VIP';
+      request.planName = 'VIP';
+      return true;
+    }
 
     if (currentUser?.createdBy) {
       request.subscriptionStatus = 'COMPANY';
@@ -130,7 +155,7 @@ export class SubscriptionGuard implements CanActivate {
       subscription.plan.planPermissions.map((pp) => pp.permission.name),
     );
 
-    if (planPermissions.has(requiredPermission)) {
+    if (planPermissions.size === 0 || planPermissions.has(requiredPermission)) {
       request.subscriptionStatus = subscription.status;
       request.planName = subscription.plan.name;
       return true;

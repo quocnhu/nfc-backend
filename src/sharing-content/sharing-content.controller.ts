@@ -15,6 +15,7 @@ import { CreateSharingContentDto } from '@/sharing-content/dto/create-sharing-co
 import { UpdateSharingContentDto, DeleteSharingContentDto, GetSharingContentDto, BulkDeleteSharingContentDto } from '@/sharing-content/dto/update-sharing-content.dto';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { Public } from '@/common/decorators/public.decorator';
+import { PublicWithSubscription } from '@/common/decorators/public-with-subscription.decorator';
 import { PrismaService } from '@/database/prisma/prisma.service';
 
 @Controller('sharing-content')
@@ -30,9 +31,9 @@ export class SharingContentController {
    * GET /sharing-content/public/user?userId=xxx — Get a user's public profile and sharing content.
    * Used by NFC card tap: frontend reads userId from NFC, sends it here.
    * Returns user info (fullname, avatar) + all their sharing content items.
-   * No auth required — anyone can view a public profile.
+   * Anonymous access allowed, but authenticated users must have valid subscription.
    */
-  @Public()
+  @PublicWithSubscription()
   @Get('public/user')
   @HttpCode(HttpStatus.OK)
   findPublicByUser(@Query('userId') userId: string) {

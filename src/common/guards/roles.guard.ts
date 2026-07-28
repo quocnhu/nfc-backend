@@ -2,6 +2,7 @@ import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '@/database/prisma/prisma.service';
 import { IS_PUBLIC_KEY } from '@/common/decorators/public.decorator';
+import { IS_PUBLIC_WITH_SUBSCRIPTION_KEY } from '@/common/decorators/public-with-subscription.decorator';
 import { PermissionHelper } from '@/common/helpers/permission.helper';
 import { derivePermission } from '@/common/helpers/permission-derivation';
 
@@ -20,8 +21,17 @@ export class RolesGuard implements CanActivate {
     ]);
     if (isPublic) return true;
 
+    const isPublicWithSubscription = this.reflector.getAllAndOverride<boolean>(
+      IS_PUBLIC_WITH_SUBSCRIPTION_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
     const request = context.switchToHttp().getRequest();
     const user = request.user;
+    
+    // Allow anonymous access for @PublicWithSubscription() routes
+    if (isPublicWithSubscription && !user) return true;
+    
     if (!user) return false;
 
     if (this.isSelfServiceRoute(request.route?.path || '')) {

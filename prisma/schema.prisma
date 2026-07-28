@@ -8,33 +8,6 @@ datasource db {
   directUrl = env("POSTGRES_URL_NON_POOLING")
 }
 
-enum UserStatus {
-  ACTIVE
-  INACTIVE
-  BLOCKED
-}
-
-enum SubscriptionStatus {
-  TRIAL
-  ACTIVE
-  PAST_DUE
-  GRACE_PERIOD
-  EXPIRED
-  CANCELLED
-}
-
-enum PaymentStatus {
-  PENDING
-  COMPLETED
-  FAILED
-  REFUNDED
-}
-
-enum UserPermissionType {
-  GRANT
-  DENY
-}
-
 model User {
   id                    String           @id @default(uuid())
   email                 String           @unique
@@ -43,20 +16,7 @@ model User {
   avatarUrl             String?
   isEmailVerified       Boolean          @default(false)
   roleId                String
-  role                  Role             @relation(fields: [roleId], references: [id], onDelete: Restrict)
-  userPermissions       UserPermission[]
-  sharingContent        SharingContent[]
-  histories             History[]
-  qrCodes               QRCode[]
-  subscriptions         Subscription[]
-  payments              Payment[]
   createdBy             String?
-  creator               User?            @relation("UserCreator", fields: [createdBy], references: [id])
-  createdUsers          User[]           @relation("UserCreator")
-  createdRoles          Role[]           @relation("RoleCreator")
-  createdPermissions    Permission[]     @relation("PermissionCreator")
-  createdSharingContent SharingContent[] @relation("SharingContentCreator")
-  refreshTokens         RefreshToken[]
   failedLoginCount      Int              @default(0)
   lockedUntil           DateTime?
   status                UserStatus       @default(ACTIVE)
@@ -64,40 +24,53 @@ model User {
   expiresAt             DateTime?
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
+  histories             History[]
+  payments              Payment[]
+  createdPermissions    Permission[]     @relation("PermissionCreator")
+  qrCodes               QRCode[]
+  refreshTokens         RefreshToken[]
+  createdRoles          Role[]           @relation("RoleCreator")
+  createdSharingContent SharingContent[] @relation("SharingContentCreator")
+  sharingContent        SharingContent[]
+  subscriptions         Subscription[]
+  creator               User?            @relation("UserCreator", fields: [createdBy], references: [id])
+  createdUsers          User[]           @relation("UserCreator")
+  role                  Role             @relation(fields: [roleId], references: [id])
+  userPermissions       UserPermission[]
 }
 
 model Role {
   id          String       @id @default(uuid())
   name        String       @unique
   isActive    Boolean      @default(true)
-  permissions Permission[]
-  users       User[]
   createdBy   String?
-  creator     User?        @relation("RoleCreator", fields: [createdBy], references: [id])
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+  creator     User?        @relation("RoleCreator", fields: [createdBy], references: [id])
+  users       User[]
+  permissions Permission[] @relation("PermissionToRole")
 }
 
 model Permission {
   id              String           @id @default(uuid())
   name            String           @unique
-  roles           Role[]
-  userPermissions UserPermission[]
-  planPermissions PlanPermission[]
   createdBy       String?
-  creator         User?            @relation("PermissionCreator", fields: [createdBy], references: [id])
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
+  creator         User?            @relation("PermissionCreator", fields: [createdBy], references: [id])
+  planPermissions PlanPermission[]
+  userPermissions UserPermission[]
+  roles           Role[]           @relation("PermissionToRole")
 }
 
 model UserPermission {
   id           String             @id @default(uuid())
   userId       String
-  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   permissionId String
-  permission   Permission         @relation(fields: [permissionId], references: [id], onDelete: Cascade)
   type         UserPermissionType @default(GRANT)
   createdAt    DateTime           @default(now())
+  permission   Permission         @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, permissionId])
 }
@@ -109,22 +82,23 @@ model Plan {
   description     String?
   price           Float            @default(0.0)
   currency        String           @default("USD")
-  durationDays    Int
+  durationDays    Float
   isActive        Boolean          @default(true)
-  planPermissions PlanPermission[]
-  subscriptions   Subscription[]
-  payments        Payment[]
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
+  features        Json?
+  payments        Payment[]
+  planPermissions PlanPermission[]
+  subscriptions   Subscription[]
 }
 
 model PlanPermission {
   id           String     @id @default(uuid())
   planId       String
-  plan         Plan       @relation(fields: [planId], references: [id], onDelete: Cascade)
   permissionId String
-  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
   createdAt    DateTime   @default(now())
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  plan         Plan       @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   @@unique([planId, permissionId])
 }
@@ -132,40 +106,40 @@ model PlanPermission {
 model Subscription {
   id               String             @id @default(uuid())
   userId           String
-  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   planId           String?
-  plan             Plan?              @relation(fields: [planId], references: [id], onDelete: SetNull)
   status           SubscriptionStatus @default(TRIAL)
   startDate        DateTime           @default(now())
   endDate          DateTime
   cancelledAt      DateTime?
   isCurrent        Boolean            @default(true)
   isForceUnlimited Boolean            @default(false)
-  payments         Payment[]
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
+  payments         Payment[]
+  plan             Plan?              @relation(fields: [planId], references: [id])
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isCurrent])
 }
 
 model Payment {
-  id              String                @id @default(uuid())
-  userId          String
-  user            User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  planId          String?
-  plan            Plan?                 @relation(fields: [planId], references: [id], onDelete: SetNull)
-  subscriptionId  String?
-  subscription    Subscription?         @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  amount          Float
-  currency        String                @default("USD")
-  paypalOrderId   String?               @unique
-  paypalPayerId   String?
-  status          PaymentStatus         @default(PENDING)
-  durationDays    Int                   @default(0)
-  expiresAt       DateTime?
-  webhookEvents   PaymentWebhookEvent[]
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
+  id             String                @id @default(uuid())
+  userId         String
+  planId         String?
+  subscriptionId String?
+  amount         Float
+  currency       String                @default("USD")
+  paypalOrderId  String?               @unique
+  paypalPayerId  String?
+  status         PaymentStatus         @default(PENDING)
+  durationDays   Int                   @default(0)
+  expiresAt      DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  plan           Plan?                 @relation(fields: [planId], references: [id])
+  subscription   Subscription?         @relation(fields: [subscriptionId], references: [id])
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  webhookEvents  PaymentWebhookEvent[]
 }
 
 model PaymentWebhookEvent {
@@ -174,11 +148,11 @@ model PaymentWebhookEvent {
   providerEventId String
   eventType       String
   paymentId       String?
-  payment         Payment?  @relation(fields: [paymentId], references: [id], onDelete: SetNull)
   payload         Json
   processed       Boolean   @default(false)
   processedAt     DateTime?
   receivedAt      DateTime  @default(now())
+  payment         Payment?  @relation(fields: [paymentId], references: [id])
 
   @@unique([provider, providerEventId])
   @@index([processed])
@@ -199,22 +173,21 @@ model PasswordReset {
 }
 
 model SharingContent {
-  id          String   @id @default(uuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  url         String
-  itemName    String
-  icon        String
-  createdBy   String?
-  creator     User?    @relation("SharingContentCreator", fields: [createdBy], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(uuid())
+  userId    String
+  url       String
+  itemName  String
+  icon      String
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  creator   User?    @relation("SharingContentCreator", fields: [createdBy], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model History {
   id         String   @id @default(uuid())
   userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   action     String
   entityId   String?
   entityType String?
@@ -222,6 +195,7 @@ model History {
   ipAddress  String?
   userAgent  String?
   timestamp  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model LoginAttempt {
@@ -249,19 +223,19 @@ model Folder {
 model QRCode {
   id        String   @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name      String
   url       String
   createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model RefreshToken {
   id        String   @id @default(uuid())
   token     String   @unique
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model RequestLog {
@@ -281,4 +255,31 @@ model RequestLog {
   @@index([timestamp])
   @@index([path, timestamp])
   @@index([userId, timestamp])
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  GRACE_PERIOD
+  EXPIRED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum UserPermissionType {
+  GRANT
+  DENY
 }

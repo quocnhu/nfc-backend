@@ -10,15 +10,20 @@ export class PlanController {
     return this.paymentService.getAllPlans();
   }
 
+  @Get('routes')
+  getPlanRoutes() {
+    return this.paymentService.getPlanRoutes();
+  }
+
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  createPlan(@Body() body: { name: string; displayName: string; description?: string; price: number; currency?: string; durationDays: number; isActive?: boolean; permissionIds?: string[] }) {
+  createPlan(@Body() body: { name: string; displayName: string; description?: string; features?: string[]; price: number; currency?: string; durationDays: number; isActive?: boolean; permissionIds?: string[] }) {
     return this.paymentService.createPlan(body);
   }
 
   @Post('update')
   @HttpCode(HttpStatus.OK)
-  updatePlan(@Body() body: { id: string; name?: string; displayName?: string; description?: string; price?: number; currency?: string; durationDays?: number; isActive?: boolean; permissionIds?: string[] }) {
+  updatePlan(@Body() body: { id: string; name?: string; displayName?: string; description?: string; features?: string[]; price?: number; currency?: string; durationDays?: number; isActive?: boolean; permissionIds?: string[] }) {
     return this.paymentService.updatePlan(body.id, body);
   }
 

@@ -2,6 +2,7 @@ import { Injectable, ExecutionContext } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from '@/common/decorators/public.decorator';
+import { IS_PUBLIC_WITH_SUBSCRIPTION_KEY } from '@/common/decorators/public-with-subscription.decorator';
 
 /**
  * JwtAuthGuard — Global JWT authentication guard.
@@ -10,7 +11,7 @@ import { IS_PUBLIC_KEY } from '@/common/decorators/public.decorator';
  * Runs on every request before RolesGuard.
  *
  * Flow:
- *   1. Check if the route is marked @Public() → skip JWT validation.
+ *   1. Check if the route is marked @Public() or @PublicWithSubscription() → skip JWT validation.
  *   2. If not public, delegate to Passport's JWT strategy.
  *   3. JwtStrategy extracts the JWT from the httpOnly "jwt" cookie.
  *   4. JwtStrategy validates the token and attaches user to request.user.
@@ -22,14 +23,19 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   }
 
   canActivate(context: ExecutionContext) {
-    // Step 1: Check if the route is marked as @Public()
+    // Step 1: Check if the route is marked as @Public() or @PublicWithSubscription()
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
 
-    // Step 2: Skip JWT validation for public routes
-    if (isPublic) {
+    const isPublicWithSubscription = this.reflector.getAllAndOverride<boolean>(
+      IS_PUBLIC_WITH_SUBSCRIPTION_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
+    // Step 2: Skip JWT validation for public routes (allows anonymous access)
+    if (isPublic || isPublicWithSubscription) {
       return true;
     }
 

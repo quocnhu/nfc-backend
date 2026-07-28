@@ -9,7 +9,8 @@ export function deriveAction(method: string, path: string): string {
   const lastSegment = segments[segments.length - 1]?.toLowerCase();
 
   if (lastSegment === 'update') return 'update';
-  if (lastSegment === 'delete') return 'delete';
+  if (lastSegment === 'delete' || lastSegment === 'bulk-delete') return 'delete';
+  if (lastSegment === 'get' || lastSegment === 'me') return 'read';
 
   const actionMap: Record<string, string> = {
     GET: 'read',

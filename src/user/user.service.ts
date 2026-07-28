@@ -207,6 +207,18 @@ export class UserService {
     if (dto.roleId) {
       const role = await this.prisma.role.findUnique({ where: { id: dto.roleId } });
       isAdminRole = role?.name.toUpperCase() === 'ADMIN';
+      
+      // Only allow assigning ADMIN role if creator is also an admin
+      if (isAdminRole && createdByUserId) {
+        const creator = await this.prisma.user.findUnique({
+          where: { id: createdByUserId },
+          include: { role: true },
+        });
+        if (creator?.role.name.toUpperCase() !== 'ADMIN') {
+          throw new ForbiddenException('Only admins can create admin users');
+        }
+      }
+      
       createData.roleId = dto.roleId;
     } else {
       createData.role = { connect: { name: 'USER' } };
@@ -247,8 +259,36 @@ export class UserService {
    * Supports optional newPassword field to change password during update.
    */
   async update(id: string, dto: UpdateUserDto, currentUserId?: string) {
-    const user = await this.prisma.user.findUnique({ where: { id } });
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      include: { role: true },
+    });
     if (!user) throw new NotFoundException('User not found');
+
+    const isTargetAdmin = user.role.name.toUpperCase() === 'ADMIN';
+    const isSelfUpdate = currentUserId && currentUserId === id;
+
+    if (isTargetAdmin && !isSelfUpdate) {
+      throw new ForbiddenException('Cannot update other admin users');
+    }
+
+    if (isTargetAdmin && dto.roleId) {
+      throw new ForbiddenException('Cannot change admin role');
+    }
+
+    // Check if trying to assign ADMIN role - only admins can do this
+    if (dto.roleId && currentUserId) {
+      const newRole = await this.prisma.role.findUnique({ where: { id: dto.roleId } });
+      if (newRole?.name.toUpperCase() === 'ADMIN') {
+        const currentUser = await this.prisma.user.findUnique({
+          where: { id: currentUserId },
+          include: { role: true },
+        });
+        if (currentUser?.role.name.toUpperCase() !== 'ADMIN') {
+          throw new ForbiddenException('Only admins can assign admin role');
+        }
+      }
+    }
 
     if (dto.email && dto.email !== user.email) {
       const emailTaken = await this.prisma.user.findUnique({
@@ -294,19 +334,27 @@ export class UserService {
   /**
    * assignPermissions — Replace a user's individual permissions (admin operation).
    * 1. Verify user exists → 404 if not.
-   * 2. Delete all existing UserPermission records for this user.
-   * 3. Bulk-insert the new set of permissions.
+   * 2. Check if user is ADMIN and not self → 403 (cannot modify other admin permissions).
+   * 3. Delete all existing UserPermission records for this user.
+   * 4. Bulk-insert the new set of permissions.
    * This is a full-replace strategy (not additive).
    */
-  async assignPermissions(userId: string, dto: AssignPermissionsDto) {
-    // Step 1: Verify user exists
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+  async assignPermissions(userId: string, dto: AssignPermissionsDto, currentUserId?: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { role: true },
+    });
     if (!user) throw new NotFoundException('User not found');
 
-    // Step 2: Remove all existing individual permissions for this user
+    const isTargetAdmin = user.role.name.toUpperCase() === 'ADMIN';
+    const isSelfUpdate = currentUserId && currentUserId === userId;
+
+    if (isTargetAdmin && !isSelfUpdate) {
+      throw new ForbiddenException('Cannot assign permissions to other admin users');
+    }
+
     await this.prisma.userPermission.deleteMany({ where: { userId } });
 
-    // Step 3: Insert the new set of permissions
     if (dto.permissionIds.length > 0) {
       await this.prisma.userPermission.createMany({
         data: dto.permissionIds.map((permissionId) => ({
@@ -369,8 +417,15 @@ export class UserService {
    * adminChangePassword — Admin changes a user's password directly.
    */
   async adminChangePassword(userId: string, newPassword: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { role: true },
+    });
     if (!user) throw new NotFoundException('User not found');
+
+    if (user.role.name.toUpperCase() === 'ADMIN') {
+      throw new ForbiddenException('Cannot change password for admin users');
+    }
 
     const hash = await bcrypt.hash(newPassword, 10);
     await this.prisma.user.update({
@@ -386,8 +441,15 @@ export class UserService {
    * Resets failedLoginCount to 0 and lockedUntil to null.
    */
   async unlock(id: string, performedByUserId?: string) {
-    const user = await this.prisma.user.findUnique({ where: { id } });
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      include: { role: true },
+    });
     if (!user) throw new NotFoundException('User not found');
+
+    if (user.role.name.toUpperCase() === 'ADMIN') {
+      throw new ForbiddenException('Cannot unlock admin users');
+    }
 
     if (!user.lockedUntil) {
       return responseOk('Account is not locked');

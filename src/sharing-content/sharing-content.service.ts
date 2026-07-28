@@ -186,11 +186,16 @@ export class SharingContentService {
     if (!user) throw new NotFoundException('User not found');
     if (user.role?.name?.toUpperCase() === 'ADMIN') throw new NotFoundException('User not found');
 
+    // VIP and COMPANY users bypass subscription checks
+    const isVipOrCompany = user.role?.name?.toUpperCase() === 'VIP' || 
+                            user.role?.name?.toUpperCase() === 'COMPANY';
+
     const currentSub = user.subscriptions[0];
     const isExpired = user.expiresAt && new Date(user.expiresAt) < new Date();
     const isSubExpired = currentSub && new Date(currentSub.endDate) < new Date();
 
-    if (user.status === 'INACTIVE' || user.status === 'BLOCKED' || isExpired || isSubExpired) {
+    // Only check expiration for non-VIP/COMPANY users
+    if (!isVipOrCompany && (user.status === 'INACTIVE' || user.status === 'BLOCKED' || isExpired || isSubExpired)) {
       throw new ForbiddenException('NFC_EXPIRED');
     }
 

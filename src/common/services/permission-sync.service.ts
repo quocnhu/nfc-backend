@@ -69,6 +69,14 @@ export class PermissionSyncService implements OnModuleInit {
     const permissions = new Set<string>();
     const controllers = this.discoveryService.getControllers();
 
+    const httpMethodMap: Record<string, string> = {
+      '0': 'GET',
+      '1': 'POST',
+      '2': 'PUT',
+      '3': 'DELETE',
+      '4': 'PATCH',
+    };
+
     for (const wrapper of controllers) {
       const { instance, metatype } = wrapper;
       
@@ -93,10 +101,14 @@ export class PermissionSyncService implements OnModuleInit {
 
         if (routePath && routeMethod) {
           // Construct full path with controller prefix
-          const fullPath = controllerPath ? `/${controllerPath}${routePath}` : routePath;
+          // Handle empty routePath, leading slashes, and ensure proper formatting
+          const cleanRoutePath = routePath.startsWith('/') ? routePath.slice(1) : routePath;
+          const normalizedRoutePath = cleanRoutePath === '' ? '' : `/${cleanRoutePath}`;
+          const fullPath = controllerPath ? `/${controllerPath}${normalizedRoutePath}` : (cleanRoutePath === '' ? '/' : `/${cleanRoutePath}`);
+          const method = httpMethodMap[routeMethod] || 'GET';
           
           // Derive permission
-          const permission = derivePermission(metatype, routeMethod, fullPath);
+          const permission = derivePermission(metatype, method, fullPath);
           permissions.add(permission);
         }
       }
