@@ -9,6 +9,7 @@ import {
   IsUUID,
   IsBoolean,
   IsDateString,
+  IsEnum,
 } from 'class-validator';
 
 /**
@@ -45,6 +46,10 @@ export class CreateUserDto {
   @IsOptional()
   @IsUUID()
   roleId?: string;
+
+  @IsOptional()
+  @IsEnum(['LOCAL', 'GOOGLE'], { message: 'userType must be LOCAL or GOOGLE' })
+  userType?: 'LOCAL' | 'GOOGLE';
 }
 
 /**
@@ -91,6 +96,10 @@ export class UpdateUserDto {
   @IsOptional()
   @IsDateString()
   expiresAt?: string | null;
+
+  @IsOptional()
+  @IsEnum(['LOCAL', 'GOOGLE'], { message: 'userType must be LOCAL or GOOGLE' })
+  userType?: 'LOCAL' | 'GOOGLE';
 }
 
 export class ToggleStatusDto {

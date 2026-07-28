@@ -365,6 +365,55 @@ export class UploadService {
   }
 
   /**
+   * uploadAvatarFromUrl — Download an image from a URL, resize, and upload to Supabase Storage.
+   * Used by Google OAuth to store the Google profile picture.
+   */
+  async uploadAvatarFromUrl(userId: string, imageUrl: string): Promise<string | null> {
+    if (!imageUrl) return null;
+
+    let response: Response;
+    try {
+      response = await fetch(imageUrl);
+      if (!response.ok) return null;
+    } catch {
+      return null;
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    await this.ensureUserdataFolders(userId);
+    await this.checkStorageLimit(userId, buffer.length);
+
+    const userFolder = await this.getUserFolder(userId);
+    const processedBuffer = await sharp(buffer)
+      .resize(USERDATA_MAX_DIMENSION, USERDATA_MAX_DIMENSION, { fit: 'cover', position: 'center' })
+      .jpeg({ quality: 90, progressive: true })
+      .toBuffer();
+
+    const timestamp = Date.now();
+    const filePath = `userdata/${userFolder}/avatar/avatar_google_${timestamp}.jpg`;
+
+    const { error } = await this.supabase.storage
+      .from(BUCKET_NAME)
+      .upload(filePath, processedBuffer, {
+        contentType: 'image/jpeg',
+        upsert: false,
+      });
+
+    if (error) return null;
+
+    const url = this.getPublicUrl(filePath);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl: url },
+    });
+
+    return url;
+  }
+
+  /**
    * listUserdataAvatars — List all avatar files for a user.
    */
   async listUserdataAvatars(userId: string) {

@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Post, HttpCode, HttpStatus, Res, Req } from '@nestjs/common';
+import { Body, Controller, Get, Post, HttpCode, HttpStatus, Res, Req, UseGuards } from '@nestjs/common';
 import { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
+import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from '@/auth/auth.service';
 import { SignupDto } from '@/auth/dto/signup.dto';
 import { SigninDto } from '@/auth/dto/signin.dto';
@@ -131,6 +132,26 @@ export class AuthController {
   @Post('resend-verification')
   resendVerification(@Body() dto: { email: string }) {
     return this.authService.resendVerificationEmail(dto.email);
+  }
+
+  @Public()
+  @UseGuards(AuthGuard('google'))
+  @Get('google')
+  googleAuth() {}
+
+  @Public()
+  @UseGuards(AuthGuard('google'))
+  @Get('google/callback')
+  async googleCallback(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const profile = (req as any).user;
+    const result = await this.authService.googleLogin(profile);
+
+    const frontendUrl = this.config.get('FRONTEND_URL') || 'http://localhost:3000';
+    const redirectUrl = `${frontendUrl}/api/auth/google/callback?access_token=${result.data?.access_token}&refresh_token=${result.data?.refresh_token}`;
+    res.redirect(redirectUrl);
   }
 
   @SkipSubscription()

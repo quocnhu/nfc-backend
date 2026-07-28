@@ -20,7 +20,7 @@ export class UserService {
   async findAll(page: number = 1, limit: number = 20, search?: string, currentUserId?: string, hasReadAll: boolean = false) {
     const skip = (page - 1) * limit;
 
-    // If user doesn't have read:user:all, filter to only their own record
+    // If user doesn't have read:user, filter to only their own record
     const baseWhere = !hasReadAll && currentUserId
       ? { id: currentUserId }
       : {};
@@ -53,6 +53,7 @@ export class UserService {
           failedLoginCount: true,
           lockedUntil: true,
           status: true,
+          userType: true,
           expiresAt: true,
           subscriptions: {
             where: { isCurrent: true },
@@ -92,6 +93,7 @@ export class UserService {
         avatarUrl: true,
         isEmailVerified: true,
         roleId: true,
+        userType: true,
         role: { select: { id: true, name: true } },
         userPermissions: {
           include: { permission: { select: { id: true, name: true } } },
@@ -131,6 +133,7 @@ export class UserService {
         email: dto.email,
         fullname: dto.fullname,
         avatarUrl: dto.avatarUrl,
+        userType: dto.userType,
       },
       select: {
         id: true,
@@ -138,6 +141,7 @@ export class UserService {
         fullname: true,
         avatarUrl: true,
         isEmailVerified: true,
+        userType: true,
         role: { select: { id: true, name: true } },
         status: true,
         expiresAt: true,
@@ -157,6 +161,10 @@ export class UserService {
     // Step 1: Verify user exists
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
+
+    if (user.userType === 'GOOGLE') {
+      throw new ForbiddenException('Cannot change password for Google accounts. Please sign in with Google.');
+    }
 
     // Step 2: Verify the current password is correct
     const pwMatches = await bcrypt.compare(dto.currentPassword, user.password);
@@ -201,6 +209,7 @@ export class UserService {
       password: hash,
       fullname: dto.fullname,
       avatarUrl: dto.avatarUrl,
+      userType: dto.userType || 'LOCAL',
       createdBy: createdByUserId || null,
     };
 
@@ -304,12 +313,16 @@ export class UserService {
     };
 
     if (dto.email) updateData.email = dto.email;
+    if (dto.userType) updateData.userType = dto.userType;
     if (dto.isEmailVerified !== undefined) updateData.isEmailVerified = dto.isEmailVerified;
     if (dto.expiresAt !== undefined) {
       updateData.expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
     }
 
     if (dto.newPassword) {
+      if (user.userType === 'GOOGLE') {
+        throw new ForbiddenException('Cannot set password for Google accounts. Google users sign in with Google.');
+      }
       updateData.password = await bcrypt.hash(dto.newPassword, 10);
     }
 
@@ -422,6 +435,10 @@ export class UserService {
       include: { role: true },
     });
     if (!user) throw new NotFoundException('User not found');
+
+    if (user.userType === 'GOOGLE') {
+      throw new ForbiddenException('Cannot set password for Google accounts. Google users sign in with Google.');
+    }
 
     if (user.role.name.toUpperCase() === 'ADMIN') {
       throw new ForbiddenException('Cannot change password for admin users');

@@ -4,6 +4,8 @@ import {
   MinLength,
   MaxLength,
   IsString,
+  IsOptional,
+  IsEnum,
   Matches,
 } from 'class-validator';
 
@@ -39,4 +41,8 @@ export class SignupDto {
   @MaxLength(100, { message: 'Fullname must not exceed 100 characters' })
   @Matches(/^[a-zA-ZÀ-ỹ\s]+$/, { message: 'Fullname must only contain letters and spaces' })
   fullname!: string;
+
+  @IsOptional()
+  @IsEnum(['LOCAL', 'GOOGLE'], { message: 'userType must be LOCAL or GOOGLE' })
+  userType?: 'LOCAL' | 'GOOGLE';
 }

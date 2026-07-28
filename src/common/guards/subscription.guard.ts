@@ -65,6 +65,29 @@ export class SubscriptionGuard implements CanActivate {
       return true;
     }
 
+    const requiredPermission = derivePermission(
+      context.getClass(),
+      request.method,
+      request.route?.path || '',
+    );
+
+    // Check if this permission is managed by ANY plan — if not, it's a role/user-level
+    // permission (e.g. read:user, read:dashboard) and SubscriptionGuard should skip it.
+    const planManagedPermissions = await this.prisma.planPermission.findMany({
+      select: { permission: { select: { name: true } } },
+    });
+    const planPermissionSet = new Set(
+      planManagedPermissions.map((pp) => pp.permission.name),
+    );
+
+    if (!planPermissionSet.has(requiredPermission)) {
+      request.subscriptionStatus = 'NON_PLAN_FEATURE';
+      request.planName = 'NON_PLAN_FEATURE';
+      return true;
+    }
+
+    // From here on: this is a plan-gated feature — enforce subscription check.
+
     const path = request.route?.path || '';
     if (
       path.includes('/payment/create-order') ||
@@ -76,8 +99,7 @@ export class SubscriptionGuard implements CanActivate {
       path.includes('/payment/admin-change-plan') ||
       path.includes('/payment/cancel-subscription') ||
       path.includes('/payment/cleanup-expired') ||
-      path.includes('/dashboard/permissions') ||
-      path.includes('/users/me')
+      path.includes('/dashboard/permissions')
     ) {
       request.subscriptionStatus = 'PAYMENT';
       request.planName = 'PAYMENT';
@@ -141,12 +163,6 @@ export class SubscriptionGuard implements CanActivate {
       );
     }
 
-    const requiredPermission = derivePermission(
-      context.getClass(),
-      request.method,
-      request.route?.path || '',
-    );
-
     if (!subscription.plan) {
       throw new ForbiddenException('No plan associated with your subscription.');
     }
@@ -155,7 +171,7 @@ export class SubscriptionGuard implements CanActivate {
       subscription.plan.planPermissions.map((pp) => pp.permission.name),
     );
 
-    if (planPermissions.size === 0 || planPermissions.has(requiredPermission)) {
+    if (planPermissions.has(requiredPermission)) {
       request.subscriptionStatus = subscription.status;
       request.planName = subscription.plan.name;
       return true;

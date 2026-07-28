@@ -69,7 +69,7 @@ export class UserController {
 
   /**
    * GET /users — List users with pagination and search.
-   * Non-admin users (without read:user:all) only see their own record.
+   * Users with read:user permission see all users; others only see their own record.
    */
   @Get()
   async findAll(
@@ -78,7 +78,7 @@ export class UserController {
     @Query('limit') limit?: string,
     @Query('search') search?: string,
   ) {
-    // Check if user has read:user:all permission
+    // Check if user has read:user:all permission to view all users
     const hasReadAll = await this.checkUserPermission(userId, 'read:user:all');
 
     return this.userService.findAll(

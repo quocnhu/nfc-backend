@@ -12,6 +12,7 @@ import { responseCreated, responseOk } from '@/common/helpers/response.helper';
 import { getVerificationEmailTemplate } from '@/auth/templates/verification-email.template';
 import { getResendVerificationEmailTemplate } from '@/auth/templates/resend-verification-email.template';
 import { getPasswordResetEmailTemplate } from '@/auth/templates/password-reset-email.template';
+import { UploadService } from '@/upload/upload.service';
 
 const REFRESH_TOKEN_EXPIRY_DAYS = 7;
 
@@ -23,6 +24,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwt: JwtService,
     private config: ConfigService,
+    private uploadService: UploadService,
   ) {
     this.transporter = nodemailer.createTransport({
       host: this.config.get('SMTP_HOST'),
@@ -54,6 +56,11 @@ export class AuthService {
     });
 
     if (existingUser) {
+      if (existingUser.userType === 'GOOGLE') {
+        throw new ForbiddenException(
+          'This email is already registered with Google. Please sign in with Google instead.',
+        );
+      }
       throw new ForbiddenException('Email already exists');
     }
 
@@ -67,6 +74,7 @@ export class AuthService {
         role: {
           connect: { name: 'USER' },
         },
+        userType: dto.userType || 'LOCAL',
         status: 'ACTIVE',
         expiresAt: new Date(Date.now() + 30 * 60 * 1000),
       },
@@ -201,6 +209,11 @@ export class AuthService {
     if (!user) {
       await this.recordLoginAttempt(dto.email, false, 'user_not_found', ip, userAgent);
       throw new ForbiddenException('Credentials incorrect');
+    }
+
+    if (user.userType === 'GOOGLE') {
+      await this.recordLoginAttempt(dto.email, false, 'google_user', ip, userAgent);
+      throw new ForbiddenException('This account uses Google sign-in. Please sign in with Google instead.');
     }
 
     if (!user.isEmailVerified) {
@@ -357,6 +370,10 @@ export class AuthService {
       return responseOk('If the email exists, a reset link has been sent.');
     }
 
+    if (user.userType === 'GOOGLE') {
+      return responseOk('If the email exists, a reset link has been sent.');
+    }
+
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
@@ -406,6 +423,10 @@ export class AuthService {
 
     if (!user) throw new BadRequestException('User not found');
 
+    if (user.userType === 'GOOGLE') {
+      throw new BadRequestException('Cannot reset password for Google accounts. Please sign in with Google.');
+    }
+
     const hash = await bcrypt.hash(dto.newPassword, 10);
 
     await this.prisma.user.update({
@@ -418,6 +439,109 @@ export class AuthService {
     });
 
     return responseOk('Password has been reset successfully');
+  }
+
+  async googleLogin(profile: { googleId: string; email: string; fullname: string; avatarUrl?: string }) {
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: profile.email },
+    });
+
+    if (existingUser) {
+      if (existingUser.userType === 'LOCAL') {
+        throw new ForbiddenException(
+          'This email is already registered with a local account. Please sign in with your email and password instead.',
+        );
+      }
+
+      const avatarUrl = profile.avatarUrl
+        ? await this.uploadService.uploadAvatarFromUrl(existingUser.id, profile.avatarUrl)
+        : existingUser.avatarUrl;
+
+      const updatedUser = await this.prisma.user.update({
+        where: { id: existingUser.id },
+        data: {
+          fullname: profile.fullname,
+          avatarUrl: avatarUrl ?? existingUser.avatarUrl,
+        },
+      });
+
+      const accessToken = await this.signToken(updatedUser.id, updatedUser.email);
+      const refreshToken = await this.generateRefreshToken(updatedUser.id);
+      const userData = await this.prisma.user.findUnique({
+        where: { id: updatedUser.id },
+        select: {
+          id: true, email: true, fullname: true, avatarUrl: true,
+          isEmailVerified: true, roleId: true, role: { select: { id: true, name: true } },
+          status: true, userType: true, expiresAt: true,
+        },
+      });
+      return {
+        statusCode: 200,
+        success: true,
+        message: 'Signed in with Google successfully',
+        data: {
+          access_token: accessToken.access_token,
+          refresh_token: refreshToken,
+          user: userData,
+          status: updatedUser.status,
+          expiresAt: updatedUser.expiresAt,
+        },
+      };
+    }
+
+    const newUser = await this.prisma.user.create({
+      data: {
+        email: profile.email,
+        password: '',
+        fullname: profile.fullname,
+        isEmailVerified: true,
+        userType: 'GOOGLE',
+        role: { connect: { name: 'USER' } },
+        status: 'ACTIVE',
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      },
+    });
+
+    const avatarUrl = profile.avatarUrl
+      ? await this.uploadService.uploadAvatarFromUrl(newUser.id, profile.avatarUrl)
+      : null;
+    if (avatarUrl) {
+      await this.prisma.user.update({
+        where: { id: newUser.id },
+        data: { avatarUrl },
+      });
+    }
+
+    const freePlan = await this.prisma.plan.findUnique({ where: { name: 'FREE' } });
+    if (freePlan) {
+      const now = new Date();
+      const endDate = new Date(now.getTime() + 30 * 60 * 1000);
+      await this.prisma.subscription.create({
+        data: {
+          userId: newUser.id,
+          planId: freePlan.id,
+          status: 'TRIAL',
+          startDate: now,
+          endDate,
+          isCurrent: true,
+        },
+      });
+    }
+
+    const accessToken = await this.signToken(newUser.id, newUser.email);
+    const refreshToken = await this.generateRefreshToken(newUser.id);
+
+    return {
+      statusCode: 201,
+      success: true,
+      message: 'Account created and signed in with Google',
+      data: {
+        access_token: accessToken.access_token,
+        refresh_token: refreshToken,
+        status: newUser.status,
+        expiresAt: newUser.expiresAt,
+      },
+    };
   }
 
   /**

@@ -7,5 +7,6 @@ import { PrismaModule } from '@/database/prisma/prisma.module';
   imports: [PrismaModule],
   controllers: [UploadController],
   providers: [UploadService],
+  exports: [UploadService],
 })
 export class UploadModule {}

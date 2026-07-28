@@ -20,6 +20,7 @@ model User {
   failedLoginCount      Int              @default(0)
   lockedUntil           DateTime?
   status                UserStatus       @default(ACTIVE)
+  userType              UserType         @default(LOCAL)
   tokenVersion          Int              @default(0)
   expiresAt             DateTime?
   createdAt             DateTime         @default(now())
@@ -255,6 +256,11 @@ model RequestLog {
   @@index([timestamp])
   @@index([path, timestamp])
   @@index([userId, timestamp])
+}
+
+enum UserType {
+  LOCAL
+  GOOGLE
 }
 
 enum UserStatus {
