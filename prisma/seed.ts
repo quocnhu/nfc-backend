@@ -180,11 +180,19 @@ async function main() {
 
   // ── 4. Admin User ────────────────────────────────────────────────
   const adminHashedPw = await bcrypt.hash(ADMIN_PASSWORD, SALT_ROUNDS);
+  const adminEmail = "nquocnhu95it@gmail.com";
   await prisma.user.upsert({
-    where: { email: "admin@example.com" }, 
-    update: {},
+    where: { email: adminEmail },
+    update: {
+      fullname: "System Admin",
+      password: adminHashedPw,
+      isEmailVerified: true,
+      userType: "LOCAL",
+      roleId: roles["ADMIN"].id,
+      status: "ACTIVE",
+    },
     create: {
-      email: "nquocnhu95it@gmail.com",
+      email: adminEmail,
       fullname: "System Admin",
       password: adminHashedPw,
       isEmailVerified: true,
