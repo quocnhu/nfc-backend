@@ -24,13 +24,10 @@ async function bootstrap() {
   // Step 3: Enable CORS — credentials: true allows httpOnly cookies in cross-origin requests
   app.enableCors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (Postman, curl, same-origin)
       if (!origin) return callback(null, true);
-      // Allow any localhost in development
       if (origin.startsWith('http://localhost:')) return callback(null, true);
-      // Allow configured origin
-      const allowed = process.env.CORS_ORIGIN || 'http://localhost:3000';
-      if (origin === allowed) return callback(null, true);
+      const allowed = (process.env.CORS_ORIGIN || 'http://localhost:3000').split(',').map((s) => s.trim().replace(/\/$/, ''));
+      if (allowed.some((a) => origin === a)) return callback(null, true);
       callback(new Error('Not allowed by CORS'));
     },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',

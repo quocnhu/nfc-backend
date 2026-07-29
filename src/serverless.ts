@@ -15,8 +15,8 @@ export async function bootstrap() {
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
       if (origin.startsWith('http://localhost:')) return callback(null, true);
-      const allowed = process.env.CORS_ORIGIN || 'http://localhost:3000';
-      if (origin === allowed) return callback(null, true);
+      const allowed = (process.env.CORS_ORIGIN || 'http://localhost:3000').split(',').map((s) => s.trim().replace(/\/$/, ''));
+      if (allowed.some((a) => origin === a)) return callback(null, true);
       callback(new Error('Not allowed by CORS'));
     },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
