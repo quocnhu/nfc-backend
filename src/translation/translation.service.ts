@@ -337,6 +337,7 @@ export class TranslationService {
   async findMine(userId: string) {
     const translations = await this.prisma.translation.findMany({
       where: { userId },
+      include: { user: { select: { id: true, fullname: true, email: true } } },
       orderBy: { createdAt: 'desc' },
     });
     return responseOk('Translations fetched successfully', translations);

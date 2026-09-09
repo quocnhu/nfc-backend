@@ -68,13 +68,23 @@ export class DashboardService {
     const rolePerms = user.role.permissions.map((p) => p.name);
     const userPerms = user.userPermissions.map((up) => up.permission.name);
     const mergedPermissions = [...new Set([...rolePerms, ...userPerms])];
+    const needsUpgrade = ['ADMIN', 'VIP', 'COMPANY'].includes(user.role.name)
+      ? false
+      : !user.createdBy;
 
     return responseOk('User permissions fetched successfully', {
-      user: { id: user.id, email: user.email, fullname: user.fullname, avatarUrl: user.avatarUrl },
+      user: {
+        id: user.id,
+        email: user.email,
+        fullname: user.fullname,
+        avatarUrl: user.avatarUrl,
+        createdBy: user.createdBy || null,
+      },
       role: user.role.name,
       rolePermissions: rolePerms,
       directPermissions: userPerms,
       mergedPermissions,
+      needsUpgrade,
     });
   }
 
@@ -104,7 +114,13 @@ export class DashboardService {
     const mergedPermissions = [...new Set([...rolePerms, ...userPerms])];
 
     return responseOk('User permissions fetched successfully', {
-      user: { id: user.id, email: user.email, fullname: user.fullname, avatarUrl: user.avatarUrl },
+      user: {
+        id: user.id,
+        email: user.email,
+        fullname: user.fullname,
+        avatarUrl: user.avatarUrl,
+        createdBy: user.createdBy || null,
+      },
       role: user.role.name,
       rolePermissions: rolePerms,
       directPermissions: userPerms,

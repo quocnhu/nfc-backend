@@ -122,6 +122,12 @@ export class SubscriptionGuard implements CanActivate {
       return true;
     }
 
+    if (currentUser?.role?.name === 'COMPANY') {
+      request.subscriptionStatus = 'COMPANY';
+      request.planName = 'COMPANY';
+      return true;
+    }
+
     if (currentUser?.createdBy) {
       request.subscriptionStatus = 'COMPANY';
       request.planName = 'COMPANY';

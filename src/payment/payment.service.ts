@@ -377,6 +377,7 @@ export class PaymentService {
         id: true,
         status: true,
         expiresAt: true,
+        createdBy: true,
         subscriptions: {
           include: { plan: true },
           orderBy: { createdAt: 'desc' },
@@ -392,7 +393,9 @@ export class PaymentService {
     if (!user) throw new NotFoundException('User not found');
 
     const currentSub = user.subscriptions.find(s => s.isCurrent);
-    const isActive = user.status === 'ACTIVE' && user.expiresAt && new Date(user.expiresAt) > new Date();
+    // Users created by an admin/company manager are always active (no subscription needed).
+    const isManagedAccount = !!user.createdBy;
+    const isActive = isManagedAccount || (user.status === 'ACTIVE' && user.expiresAt && new Date(user.expiresAt) > new Date());
     const daysRemaining = user.expiresAt
       ? Math.max(0, Math.ceil((new Date(user.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
       : 0;
@@ -401,13 +404,18 @@ export class PaymentService {
 
     return responseOk('Payment status fetched successfully', {
       isActive,
-      status: user.status,
+      status: isManagedAccount ? 'ACTIVE' : user.status,
+      planName: isManagedAccount ? 'COMPANY' : currentSub?.plan?.name || null,
       expiresAt: user.expiresAt,
       daysRemaining,
       currentSubscription: currentSub ? {
         plan: currentSub.plan,
         status: currentSub.status,
         endDate: currentSub.endDate,
+      } : isManagedAccount ? {
+        plan: { name: 'COMPANY', displayName: 'Company', price: 0 },
+        status: 'ACTIVE',
+        endDate: null,
       } : null,
       subscriptionHistory: user.subscriptions.map(s => ({
         plan: s.plan,
