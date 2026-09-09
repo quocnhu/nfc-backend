@@ -12,12 +12,13 @@ import {
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { PrismaService } from '@/database/prisma/prisma.service';
 import { TranslationService } from '@/translation/translation.service';
-import { CreateTranslationDto, DeleteTranslationDto, BulkDeleteTranslationDto, SpeakQueryDto } from '@/translation/dto/create-translation.dto';
+import { CreateTranslationDto, UpdateTranslationDto, DeleteTranslationDto, BulkDeleteTranslationDto, SpeakQueryDto } from '@/translation/dto/create-translation.dto';
 
 /**
  * TranslationController — Translate text via Google Translate and store history.
  *
  * POST   /api/translation                     — Translate + save
+ * POST   /api/translation/update              — Edit a saved translation
  * GET    /api/translation/me                  — List my translations
  * GET    /api/translation/tts                 — Native speech audio (text + lang)
  * GET    /api/translation                     — List translations (admin sees all)
@@ -50,6 +51,20 @@ export class TranslationController {
   @Get('me')
   findMine(@CurrentUser('sub') userId: string) {
     return this.translationService.findMine(userId);
+  }
+
+  /**
+   * POST /translation/update — Edit a saved translation.
+   * Body: { id, sourceText?, translatedText? }
+   */
+  @Post('update')
+  @HttpCode(HttpStatus.OK)
+  async update(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: UpdateTranslationDto,
+  ) {
+    const canEditAll = await this.hasPermission(userId, 'delete:translation:all');
+    return this.translationService.update(userId, dto, canEditAll);
   }
 
   /**

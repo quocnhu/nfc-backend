@@ -97,7 +97,7 @@ vercel --prod --yes
 npx prisma db push
 
 # Run seed script to create admin user
-# Admin credentials: nquocnhu95it@gmail.com / Admin@123
+# Admin credentials: <ADMIN-EMAIL> / <ADMIN-PASSWORD> (set these in your environment)
 npx ts-node prisma/seed.ts
 
 # ============================================================
@@ -145,7 +145,7 @@ curl -s -o /dev/null -w "%{http_code}" https://<YOUR-FRONTEND-URL>.vercel.app
 # Test login (should return {"success":true})
 curl -s -X POST https://<YOUR-FRONTEND-URL>.vercel.app/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"nquocnhu95it@gmail.com","password":"Admin@123"}'
+  -d '{"email":"<ADMIN-EMAIL>","password":"<ADMIN-PASSWORD>"}'
 
 # ============================================================
 # IMPORTANT NOTES

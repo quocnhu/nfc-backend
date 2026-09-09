@@ -205,7 +205,7 @@ async function main() {
       status: "ACTIVE",
     },
   });
-  console.log("  ✔ nquocnhu95it@gmail.com user synced (password: Admin@123)");
+  console.log(`  ✔ ${adminEmail} user synced`);
 
   // ── 5. Folders ───────────────────────────────────────────────────
   const folderSeeds = [

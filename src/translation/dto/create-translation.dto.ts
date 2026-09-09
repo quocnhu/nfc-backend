@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, MaxLength } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, MaxLength } from 'class-validator';
 
 export class CreateTranslationDto {
   @IsString()
@@ -23,6 +23,22 @@ export class SpeakQueryDto {
   @IsString()
   @IsNotEmpty()
   lang: string;
+}
+
+export class UpdateTranslationDto {
+  @IsString()
+  @IsNotEmpty()
+  id: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(5000)
+  sourceText?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(5000)
+  translatedText?: string;
 }
 
 export class DeleteTranslationDto {

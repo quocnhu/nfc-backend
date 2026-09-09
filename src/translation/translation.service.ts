@@ -7,7 +7,11 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '@/database/prisma/prisma.service';
 import { responseOk, responseCreated } from '@/common/helpers/response.helper';
-import { CreateTranslationDto, SpeakQueryDto } from '@/translation/dto/create-translation.dto';
+import {
+  CreateTranslationDto,
+  UpdateTranslationDto,
+  SpeakQueryDto,
+} from '@/translation/dto/create-translation.dto';
 import { translate } from '@vitalets/google-translate-api';
 import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
 
@@ -349,6 +353,39 @@ export class TranslationService {
       orderBy: { createdAt: 'desc' },
     });
     return responseOk('Translations fetched successfully', translations);
+  }
+
+  /**
+   * update — Edit the text of a translation the user owns.
+   * Admin (read:translation:all) can edit any translation.
+   */
+  async update(userId: string, dto: UpdateTranslationDto, canEditAll: boolean) {
+    const { id, sourceText, translatedText } = dto;
+    if (sourceText === undefined && translatedText === undefined) {
+      throw new BadRequestException('Nothing to update');
+    }
+
+    const translation = await this.prisma.translation.findUnique({
+      where: { id },
+    });
+
+    if (!translation) {
+      throw new NotFoundException('Translation not found');
+    }
+
+    if (translation.userId !== userId && !canEditAll) {
+      throw new ForbiddenException('You can only edit your own translations');
+    }
+
+    const updated = await this.prisma.translation.update({
+      where: { id },
+      data: {
+        ...(sourceText !== undefined ? { sourceText } : {}),
+        ...(translatedText !== undefined ? { translatedText } : {}),
+      },
+    });
+
+    return responseOk('Translation updated successfully', updated);
   }
 
   /**
