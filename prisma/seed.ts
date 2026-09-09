@@ -27,6 +27,10 @@ async function main() {
     "delete:sharingcontent",
     "read:history",
     "read:history:all",
+    "read:translation",
+    "create:translation",
+    "update:translation",
+    "delete:translation",
     "read:dashboard",
     "create:avatar",
     "read:avatar",
@@ -71,9 +75,9 @@ async function main() {
   // ── 2. Roles ─────────────────────────────────────────────────────
   const roleSeeds = [
     { name: "ADMIN", permNames: permissionNames },
-    { name: "USER", permNames: ["create:user", "read:user", "update:user", "create:role", "read:role", "create:sharingcontent", "read:sharingcontent", "update:sharingcontent", "delete:sharingcontent", "read:history", "read:dashboard", "create:avatar", "read:avatar", "delete:avatar", "read:upload", "create:upload", "delete:upload", "read:qr", "create:qr", "delete:qr"] },
-    { name: "VIP", permNames: ["create:user", "read:user", "update:user", "create:role", "read:role", "create:sharingcontent", "read:sharingcontent", "update:sharingcontent", "delete:sharingcontent", "read:history", "read:history:all", "read:dashboard", "create:avatar", "read:avatar", "delete:avatar", "read:upload", "create:upload", "delete:upload", "read:qr", "create:qr", "delete:qr"] },
-    { name: "COMPANY", permNames: ["create:user", "read:user", "update:user", "create:role", "read:role", "create:sharingcontent", "read:sharingcontent", "update:sharingcontent", "delete:sharingcontent", "read:history", "read:history:all", "read:dashboard", "create:avatar", "read:avatar", "delete:avatar", "read:upload", "create:upload", "delete:upload", "read:qr", "create:qr", "delete:qr", "delete:upload"] },
+    { name: "USER", permNames: ["create:user", "read:user", "update:user", "create:role", "read:role", "create:sharingcontent", "read:sharingcontent", "update:sharingcontent", "delete:sharingcontent", "read:history", "read:translation", "create:translation", "update:translation", "delete:translation", "read:dashboard", "create:avatar", "read:avatar", "delete:avatar", "read:upload", "create:upload", "delete:upload", "read:qr", "create:qr", "delete:qr"] },
+    { name: "VIP", permNames: ["create:user", "read:user", "update:user", "create:role", "read:role", "create:sharingcontent", "read:sharingcontent", "update:sharingcontent", "delete:sharingcontent", "read:history", "read:history:all", "read:translation", "create:translation", "update:translation", "delete:translation", "read:dashboard", "create:avatar", "read:avatar", "delete:avatar", "read:upload", "create:upload", "delete:upload", "read:qr", "create:qr", "delete:qr"] },
+    { name: "COMPANY", permNames: ["create:user", "read:user", "update:user", "create:role", "read:role", "create:sharingcontent", "read:sharingcontent", "update:sharingcontent", "delete:sharingcontent", "read:history", "read:history:all", "read:translation", "create:translation", "update:translation", "delete:translation", "read:dashboard", "create:avatar", "read:avatar", "delete:avatar", "read:upload", "create:upload", "delete:upload", "read:qr", "create:qr", "delete:qr", "delete:upload"] },
     { name: "LOCAL", permNames: permissionNames },
   ];
 

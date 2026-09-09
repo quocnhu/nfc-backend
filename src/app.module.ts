@@ -17,6 +17,7 @@ import { UserModule } from '@/user/user.module';
 import { RoleModule } from '@/role/role.module';
 import { PermissionModule } from '@/permission/permission.module';
 import { QRModule } from '@/qr/qr.module';
+import { TranslationModule } from '@/translation/translation.module';
 import { PaymentModule } from '@/payment/payment.module';
 import { RequestMonitorModule } from '@/request-monitor/request-monitor.module';
 import { PermissionHelperModule } from '@/common/helpers/permission-helper.module';
@@ -61,6 +62,7 @@ import { PermissionSyncService } from '@/common/services/permission-sync.service
     RoleModule,         // Role CRUD with permission assignment
     PermissionModule,   // Permission CRUD
     QRModule,           // QR code generation
+    TranslationModule,  // Google Translate + translation history
     PaymentModule,      // PayPal payment processing
     RequestMonitorModule, // Request monitoring and analytics
   ],

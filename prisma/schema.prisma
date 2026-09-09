@@ -34,6 +34,7 @@ model User {
   createdSharingContent SharingContent[] @relation("SharingContentCreator")
   sharingContent        SharingContent[]
   subscriptions         Subscription[]
+  translations          Translation[]
   creator               User?            @relation("UserCreator", fields: [createdBy], references: [id])
   createdUsers          User[]           @relation("UserCreator")
   role                  Role             @relation(fields: [roleId], references: [id])
@@ -237,6 +238,19 @@ model RefreshToken {
   expiresAt DateTime
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Translation {
+  id              String   @id @default(uuid())
+  userId          String
+  sourceText      String
+  translatedText  String
+  sourceLang      String
+  targetLang      String
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model RequestLog {

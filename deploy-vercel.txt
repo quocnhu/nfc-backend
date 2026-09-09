@@ -1,0 +1,163 @@
+# ============================================================
+# DEPLOY FULLSTACK PROJECT TO VERCEL (Step by Step)
+# ============================================================
+# Backend: nest-prisma-app/
+# Frontend: nfc-tap-frontend/
+# ============================================================
+
+# ============================================================
+# 1. INSTALL VERCEL CLI
+# ============================================================
+npm i -g vercel
+
+# Verify installation
+vercel --version
+
+# Login to Vercel (opens browser for authentication)
+vercel login
+
+# Verify login
+vercel whoami
+
+# ============================================================
+# 2. DEPLOY BACKEND FIRST (nest-prisma-app)
+# ============================================================
+
+# Navigate to backend
+cd nest-prisma-app/
+
+# Deploy to Vercel (first time)
+# This will link your GitHub repo and create the project
+vercel --prod --yes
+
+# After deployment, note the production URL:
+# Example: https://nest-prisma-app.vercel.app
+
+# ============================================================
+# 3. SET BACKEND ENVIRONMENT VARIABLES ON VERCEL
+# ============================================================
+# Run these commands one by one.
+# Replace values with your own if different.
+
+# Database (Supabase/Postgres)
+echo "postgres://postgres.<PROJECT-REF>:<DB-PASSWORD>@aws-1-us-west-1.pooler.supabase.com:6543/postgres?sslmode=require&pgbouncer=true" | vercel env add POSTGRES_PRISMA_URL production
+echo "postgres://postgres.<PROJECT-REF>:<DB-PASSWORD>@aws-1-us-west-1.pooler.supabase.com:5432/postgres?sslmode=require" | vercel env add POSTGRES_URL_NON_POOLING production
+
+# App config
+echo "https://<YOUR-FRONTEND-URL>.vercel.app" | vercel env add CORS_ORIGIN production
+echo "true" | vercel env add REGISTRATION_ENABLED production
+
+# JWT
+echo "<JWT-SECRET>" | vercel env add JWT_SECRET production
+
+# Supabase platform
+echo "https://<PROJECT-REF>.supabase.co" | vercel env add SUPABASE_URL production
+echo "<SUPABASE-SERVICE-ROLE-KEY>" | vercel env add SUPABASE_SERVICE_ROLE_KEY production
+
+# SMTP (Nodemailer)
+echo "smtp.gmail.com" | vercel env add SMTP_HOST production
+echo "587" | vercel env add SMTP_PORT production
+echo "nquocnhu95it@gmail.com" | vercel env add SMTP_USER production
+echo "<YOUR-SMTP-PASS>" | vercel env add SMTP_PASS production
+echo "nquocnhu95it@gmail.com" | vercel env add MAIL_FROM production
+
+# Frontend URL (for Google OAuth redirect)
+echo "https://<YOUR-FRONTEND-URL>.vercel.app" | vercel env add FRONTEND_URL production
+
+# Google OAuth
+echo "<YOUR-GOOGLE-CLIENT-ID>" | vercel env add GOOGLE_CLIENT_ID production
+echo "<YOUR-GOOGLE-CLIENT-SECRET>" | vercel env add GOOGLE_CLIENT_SECRET production
+echo "https://<YOUR-BACKEND-URL>.vercel.app/api/auth/google/callback" | vercel env add GOOGLE_CALLBACK_URL production
+
+# PayPal
+echo "<YOUR-PAYPAL-CLIENT-ID>" | vercel env add PAYPAL_CLIENT_ID production
+echo "<YOUR-PAYPAL-CLIENT-SECRET>" | vercel env add PAYPAL_CLIENT_SECRET production
+echo "sandbox" | vercel env add PAYPAL_MODE production
+
+# NFC Service Pricing
+echo "2.00" | vercel env add NFC_PRICE_USD production
+echo "365" | vercel env add NFC_DURATION_DAYS production
+
+# ============================================================
+# 4. UPDATE BACKEND ENV VARS (if needed after frontend deploy)
+# ============================================================
+# Update FRONTEND_URL and CORS_ORIGIN after you know the frontend URL
+vercel env update FRONTEND_URL production --yes --value "https://<YOUR-FRONTEND-URL>.vercel.app"
+vercel env update CORS_ORIGIN production --yes --value "https://<YOUR-FRONTEND-URL>.vercel.app"
+
+# ============================================================
+# 5. REDEPLOY BACKEND WITH ENV VARS
+# ============================================================
+vercel --prod --yes
+
+# ============================================================
+# 6. SEED DATABASE (create admin user + test data)
+# ============================================================
+# Run prisma db push to ensure tables exist
+npx prisma db push
+
+# Run seed script to create admin user
+# Admin credentials: nquocnhu95it@gmail.com / Admin@123
+npx ts-node prisma/seed.ts
+
+# ============================================================
+# 7. DEPLOY FRONTEND (nfc-tap-frontend)
+# ============================================================
+cd ../nfc-tap-frontend/
+
+vercel --prod --yes
+
+# After deployment, note the production URL:
+# Example: https://nfc-tap-frontend.vercel.app
+
+# ============================================================
+# 8. SET FRONTEND ENVIRONMENT VARIABLES ON VERCEL
+# ============================================================
+
+# Backend API URL (no trailing /api, code adds it automatically)
+echo "https://<YOUR-BACKEND-URL>.vercel.app" | vercel env add NEXT_PUBLIC_API_URL production
+
+# NextAuth config
+echo "https://<YOUR-FRONTEND-URL>.vercel.app" | vercel env add NEXTAUTH_URL production
+echo "<YOUR-NEXTAUTH-SECRET>" | vercel env add NEXTAUTH_SECRET production
+
+# PayPal Client ID (public, visible to browser)
+echo "<YOUR-PAYPAL-CLIENT-ID>" | vercel env add NEXT_PUBLIC_PAYPAL_CLIENT_ID production
+
+# Default profile user ID (optional)
+echo "<USER-UUID>" | vercel env add NEXT_PUBLIC_PROFILE_USER_ID production
+
+# ============================================================
+# 9. REDEPLOY FRONTEND WITH ENV VARS
+# ============================================================
+vercel --prod --yes
+
+# ============================================================
+# 10. VERIFY DEPLOYMENT
+# ============================================================
+
+# Test backend
+curl -s https://<YOUR-BACKEND-URL>.vercel.app/api/auth/registration-status
+
+# Test frontend
+curl -s -o /dev/null -w "%{http_code}" https://<YOUR-FRONTEND-URL>.vercel.app
+
+# Test login (should return {"success":true})
+curl -s -X POST https://<YOUR-FRONTEND-URL>.vercel.app/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"nquocnhu95it@gmail.com","password":"Admin@123"}'
+
+# ============================================================
+# IMPORTANT NOTES
+# ============================================================
+# - Update Google Cloud Console OAuth redirect URI to:
+#   https://<YOUR-BACKEND-URL>.vercel.app/api/auth/google/callback
+#
+# - .env files contain secrets - NEVER commit them to git.
+#   Add them only via Vercel Dashboard or Vercel CLI.
+#
+# - NEXT_PUBLIC_ variables are inlined at build time.
+#   Re-deploy after changing them.
+#
+# - On Vercel free tier, serverless functions may have cold starts
+#   (1-2 seconds delay on first request).
