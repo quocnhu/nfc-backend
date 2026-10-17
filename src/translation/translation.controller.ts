@@ -8,11 +8,23 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { PrismaService } from '@/database/prisma/prisma.service';
 import { TranslationService } from '@/translation/translation.service';
-import { CreateTranslationDto, UpdateTranslationDto, DeleteTranslationDto, BulkDeleteTranslationDto, SpeakQueryDto } from '@/translation/dto/create-translation.dto';
+import {
+  CreateTranslationDto,
+  UpdateTranslationDto,
+  DeleteTranslationDto,
+  BulkDeleteTranslationDto,
+  SpeakQueryDto,
+  LiveTranslateDto,
+  RomanizeDto,
+  SttDto,
+} from '@/translation/dto/create-translation.dto';
 
 /**
  * TranslationController — Translate text via Google Translate and store history.
@@ -24,6 +36,8 @@ import { CreateTranslationDto, UpdateTranslationDto, DeleteTranslationDto, BulkD
  * GET    /api/translation                     — List translations (admin sees all)
  * DELETE /api/translation/:id                 — Delete one
  * POST   /api/translation/bulk-delete         — Delete many
+ * POST   /api/translation/live                — Realtime turn (Gemini, not saved)
+ * POST   /api/translation/stt                 — Realtime speech-to-text (multipart `audio`)
  */
 @Controller('translation')
 export class TranslationController {
@@ -74,6 +88,63 @@ export class TranslationController {
   @Get('tts')
   speak(@Query() dto: SpeakQueryDto) {
     return this.translationService.speak(dto);
+  }
+
+  /**
+   * POST /translation/live — Realtime turn via Gemini.
+   * Body: { text, fromHint?, to[] } → { outputs: { lang: text }, errors: { lang: msg } }
+   *
+   * Deliberately does not persist: realtime turns are ephemeral.
+   */
+  @Post('live')
+  @HttpCode(HttpStatus.OK)
+  async live(@Body() dto: LiveTranslateDto) {
+    const { outputs, errors, romanizations, detectedSource } = await this.translationService.translateLive({
+      text: dto.text,
+      fromHint: dto.fromHint,
+      to: dto.to,
+    });
+    return {
+      statusCode: 200,
+      message: 'Live translation ready',
+      data: { outputs, errors, romanizations, detectedSource },
+    };
+  }
+
+  /**
+   * POST /translation/romanize — Pronunciation guide for one text.
+   * Body: { text, lang } → { romanization } (null when the language needs none).
+   *
+   * Lets the UI fill in a guide on demand — for a saved translation that was
+   * stored before romanization existed, or to retry one that came back empty.
+   */
+  @Post('romanize')
+  @HttpCode(HttpStatus.OK)
+  async romanize(@Body() dto: RomanizeDto) {
+    const romanization = await this.translationService.romanize(dto.text, dto.lang);
+    return {
+      statusCode: 200,
+      message: romanization ? 'Romanization ready' : 'No romanization for this language',
+      data: { romanization, lang: dto.lang },
+    };
+  }
+
+  /**
+   * POST /translation/stt — Speech-to-text for the realtime mic.
+   * Multipart: `audio` file + optional `langHint` field.
+   */
+  @Post('stt')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileInterceptor('audio'))
+  async stt(
+    @UploadedFile() audio: Express.Multer.File | undefined,
+    @Body() body?: SttDto,
+  ) {
+    if (!audio) {
+      return { statusCode: 400, message: 'Audio file is required', data: null };
+    }
+    const result = await this.translationService.stt(audio.buffer, audio.mimetype, body?.langHint);
+    return { statusCode: 200, message: 'Speech transcribed', data: result };
   }
 
   /**

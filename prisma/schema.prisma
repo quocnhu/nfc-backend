@@ -245,6 +245,9 @@ model Translation {
   userId          String
   sourceText      String
   translatedText  String
+  /// Pronunciation guide for the translation (pinyin / romaji / respelling).
+  /// Null for languages that need none, and for rows saved before this existed.
+  romanization    String?
   sourceLang      String
   targetLang      String
   createdAt       DateTime @default(now())
