@@ -445,7 +445,7 @@ export class PaymentService {
 
   async getFilteredSubscriptions(startDate?: string, endDate?: string) {
     const now = new Date();
-    let dateFilter: any = {};
+    const dateFilter: any = {};
 
     if (startDate) {
       dateFilter.createdAt = { ...dateFilter.createdAt, gte: new Date(startDate) };

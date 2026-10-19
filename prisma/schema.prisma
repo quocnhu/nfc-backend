@@ -35,6 +35,7 @@ model User {
   sharingContent        SharingContent[]
   subscriptions         Subscription[]
   translations          Translation[]
+  sharedBoxes           SharedBox[]
   creator               User?            @relation("UserCreator", fields: [createdBy], references: [id])
   createdUsers          User[]           @relation("UserCreator")
   role                  Role             @relation(fields: [roleId], references: [id])
@@ -254,6 +255,48 @@ model Translation {
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+}
+
+/// A learning box opened up for anonymous visitors, identified by a share token.
+///
+/// Deliberately separate from Translation: a Learning Box is normally just a
+/// view over one's own saved rows, but a shared box must not leak that private
+/// history to a stranger, so it starts empty and keeps everything written in it
+/// here. Disabling a shared box therefore never touches the owner's own data.
+model SharedBox {
+  id         String   @id @default(uuid())
+  /// Unguessable handle that appears in the share URL and the QR. Anyone
+  /// holding it may read and add to the box, so it must not be sequential.
+  token      String   @unique
+  ownerId    String
+  inputLang  String
+  outputLang String
+  /// Revoked links stop serving immediately without deleting what was written.
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  sentences SharedSentence[]
+  owner     User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, createdAt])
+}
+
+/// One line in a shared box. `isOwner` distinguishes the owner's own additions
+/// from a visitor's — a stranger's text is never attributed to the owner.
+model SharedSentence {
+  id             String   @id @default(uuid())
+  boxId          String
+  sourceText     String
+  translatedText String
+  romanization   String?
+  isOwner        Boolean  @default(false)
+  /// IP of the writer, for abuse investigation only — never returned by the API.
+  authorIp       String?
+  createdAt      DateTime @default(now())
+  box            SharedBox @relation(fields: [boxId], references: [id], onDelete: Cascade)
+
+  @@index([boxId, createdAt])
 }
 
 model RequestLog {

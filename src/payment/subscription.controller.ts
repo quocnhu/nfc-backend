@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Query, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Param, HttpCode, HttpStatus, BadRequestException } from '@nestjs/common';
 import { PaymentService } from '@/payment/payment.service';
 
 @Controller('subscriptions')
@@ -14,7 +14,8 @@ export class SubscriptionController {
   }
 
   @Get('user/:userId')
-  getUserSubscriptions(@Query('userId') userId: string) {
+  getUserSubscriptions(@Param('userId') userId: string) {
+    if (!userId) throw new BadRequestException('userId is required');
     return this.paymentService.getUserSubscriptions(userId);
   }
 

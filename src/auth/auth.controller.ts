@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, HttpCode, HttpStatus, Res, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, HttpCode, HttpStatus, Res, Req, UseGuards, ForbiddenException } from '@nestjs/common';
 import { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { AuthGuard } from '@nestjs/passport';
@@ -54,7 +54,7 @@ export class AuthController {
     @Body() dto: SignupDto,
   ) {
     if (this.config.get('REGISTRATION_ENABLED') === 'false') {
-      return { statusCode: 403, success: false, message: 'Registration is currently disabled' };
+      throw new ForbiddenException('Registration is currently disabled');
     }
     const result = await this.authService.signup(dto);
     return { statusCode: result.statusCode, success: result.success, message: result.message };
@@ -154,6 +154,7 @@ export class AuthController {
     res.redirect(redirectUrl);
   }
 
+  @Public()
   @SkipSubscription()
   @HttpCode(HttpStatus.OK)
   @Post('logout')

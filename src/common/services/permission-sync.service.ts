@@ -44,21 +44,29 @@ export class PermissionSyncService implements OnModuleInit {
 
       if (missingPermissions.length === 0) {
         this.logger.log('All permissions already exist in database');
-        return;
+      } else {
+        this.logger.log(`Creating ${missingPermissions.length} missing permissions`);
+
+        // Create missing permissions
+        const createdPermissions = await this.prisma.permission.createMany({
+          data: missingPermissions.map(name => ({ name })),
+          skipDuplicates: true,
+        });
+
+        this.logger.log(`Created ${createdPermissions.count} new permissions`);
+
+        // Assign new permissions to ADMIN role
+        await this.assignPermissionsToAdminRole(missingPermissions);
       }
 
-      this.logger.log(`Creating ${missingPermissions.length} missing permissions`);
-
-      // Create missing permissions
-      const createdPermissions = await this.prisma.permission.createMany({
-        data: missingPermissions.map(name => ({ name })),
-        skipDuplicates: true,
-      });
-
-      this.logger.log(`Created ${createdPermissions.count} new permissions`);
-
-      // Assign new permissions to ADMIN role
-      await this.assignPermissionsToAdminRole(missingPermissions);
+      // Sharedbox permissions are needed by every role (the Share button),
+      // so grant them to all existing roles, not only ADMIN.
+      const sharedboxPermissions = Array.from(requiredPermissions).filter(name =>
+        name.endsWith(':sharedbox')
+      );
+      if (sharedboxPermissions.length > 0) {
+        await this.assignPermissionsToRoles(sharedboxPermissions);
+      }
 
     } catch (error) {
       this.logger.error('Failed to sync permissions', error);
@@ -174,6 +182,53 @@ export class PermissionSyncService implements OnModuleInit {
 
     } catch (error) {
       this.logger.error('Failed to assign permissions to ADMIN role', error);
+    }
+  }
+
+  /**
+   * assignPermissionsToRoles — Grant the given permissions to every existing
+   * role (used for sharedbox permissions, which all roles need).
+   */
+  private async assignPermissionsToRoles(permissionNames: string[]) {
+    try {
+      const roles = await this.prisma.role.findMany({
+        include: { permissions: true },
+      });
+
+      const permissions = await this.prisma.permission.findMany({
+        where: { name: { in: permissionNames } },
+        select: { id: true },
+      });
+
+      if (roles.length === 0 || permissions.length === 0) {
+        this.logger.warn('No roles or permissions found for role assignment');
+        return;
+      }
+
+      for (const role of roles) {
+        const existingPermissionIds = new Set(role.permissions.map(p => p.id));
+
+        const newPermissionIds = permissions
+          .map(p => p.id)
+          .filter(id => !existingPermissionIds.has(id));
+
+        if (newPermissionIds.length === 0) continue;
+
+        await this.prisma.role.update({
+          where: { id: role.id },
+          data: {
+            permissions: {
+              connect: newPermissionIds.map(id => ({ id })),
+            },
+          },
+        });
+
+        this.logger.log(
+          `Assigned ${newPermissionIds.length} new permissions to ${role.name} role`,
+        );
+      }
+    } catch (error) {
+      this.logger.error('Failed to assign permissions to roles', error);
     }
   }
 }

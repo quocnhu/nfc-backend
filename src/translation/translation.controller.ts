@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { Public } from '@/common/decorators/public.decorator';
 import { PrismaService } from '@/database/prisma/prisma.service';
 import { TranslationService } from '@/translation/translation.service';
 import {
@@ -85,6 +86,7 @@ export class TranslationController {
    * GET /translation/tts?text=&lang= — Native-sounding speech (Google TTS proxy).
    * Returns { audio: base64-mp3 }.
    */
+  @Public()
   @Get('tts')
   speak(@Query() dto: SpeakQueryDto) {
     return this.translationService.speak(dto);

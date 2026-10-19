@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from '@/app.module';
+import { corsOptions } from '@/config/cors';
 import cookieParser from 'cookie-parser';
 
 /**
@@ -22,17 +23,8 @@ async function bootstrap() {
   app.use(cookieParser());
 
   // Step 3: Enable CORS — credentials: true allows httpOnly cookies in cross-origin requests
-  app.enableCors({
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-      if (origin.startsWith('http://localhost:')) return callback(null, true);
-      const allowed = (process.env.CORS_ORIGIN || 'https://quocnhu.vercel.app').split(',').map((s) => s.trim().replace(/\/$/, ''));
-      if (allowed.some((a) => origin === a)) return callback(null, true);
-      callback(new Error('Not allowed by CORS'));
-    },
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-    credentials: true,
-  });
+  // (shared options with serverless.ts — see src/config/cors.ts)
+  app.enableCors(corsOptions);
 
   // Step 3: Global validation pipe — validates all incoming request bodies against DTOs
   app.useGlobalPipes(

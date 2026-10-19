@@ -21,7 +21,7 @@ import {
   SpeakQueryDto,
 } from '@/translation/dto/create-translation.dto';
 import { translate } from '@vitalets/google-translate-api';
-import { francAll } from 'franc';
+import { all as francAll } from 'franc';
 import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
 
 /**

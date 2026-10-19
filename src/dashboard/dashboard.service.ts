@@ -142,7 +142,7 @@ export class DashboardService {
 
   async getSubscriptionStats(startDate?: string, endDate?: string) {
     const now = new Date();
-    let dateFilter: any = {};
+    const dateFilter: any = {};
 
     if (startDate) {
       dateFilter.createdAt = { ...dateFilter.createdAt, gte: new Date(startDate) };
@@ -172,7 +172,7 @@ export class DashboardService {
 
   async getPaymentStats(startDate?: string, endDate?: string) {
     const now = new Date();
-    let dateFilter: any = {};
+    const dateFilter: any = {};
 
     if (startDate) {
       dateFilter.createdAt = { ...dateFilter.createdAt, gte: new Date(startDate) };

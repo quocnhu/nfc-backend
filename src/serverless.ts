@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { corsOptions } from './config/cors';
 import cookieParser from 'cookie-parser';
 
 let cachedApp: any;
@@ -11,17 +12,8 @@ export async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api');
   app.use(cookieParser());
-  app.enableCors({
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-      if (origin.startsWith('http://localhost:')) return callback(null, true);
-      const allowed = (process.env.CORS_ORIGIN || 'http://localhost:3000').split(',').map((s) => s.trim().replace(/\/$/, ''));
-      if (allowed.some((a) => origin === a)) return callback(null, true);
-      callback(new Error('Not allowed by CORS'));
-    },
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-    credentials: true,
-  });
+  // Shared options with main.ts — see src/config/cors.ts
+  app.enableCors(corsOptions);
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

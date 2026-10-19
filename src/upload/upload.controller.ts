@@ -257,69 +257,6 @@ export class UploadController {
     return this.uploadService.createFolder(body);
   }
 
-  /**
-   * DELETE /upload/folders/:name — Delete a custom folder + its files.
-   */
-  @Delete('folders/:name')
-  @HttpCode(HttpStatus.OK)
-  deleteFolder(@Param('name') name: string) {
-    return this.uploadService.deleteFolder(name);
-  }
-
-  /**
-   * GET /upload/list/:folder — List files in a folder (admin only).
-   */
-  @Get('list/:folder')
-  listFiles(
-    @Param('folder') folder: string,
-    @CurrentUser('sub') userId: string,
-  ) {
-    return this.uploadService.listFiles(folder, userId);
-  }
-
-  // ─── Parameterized routes AFTER static routes ───
-
-  /**
-   * POST /upload/:folder — Upload images to a folder (admin only).
-   */
-  @Post(':folder')
-  @UseInterceptors(
-    FilesInterceptor('files', 10, {
-      storage: multer.memoryStorage(),
-      limits: { fileSize: 10 * 1024 * 1024 },
-    }),
-  )
-  @HttpCode(HttpStatus.OK)
-  async uploadAdminFiles(
-    @Param('folder') folder: string,
-    @UploadedFiles() files: Express.Multer.File[],
-    @CurrentUser('sub') userId: string,
-  ) {
-    const result = await this.uploadService.uploadFiles(folder, files, userId);
-    return {
-      statusCode: 200,
-      success: true,
-      message: `${result.uploaded.length} file(s) uploaded successfully to "${folder}"`,
-      data: {
-        uploaded: result.uploaded,
-        errors: result.errors,
-      },
-    };
-  }
-
-  /**
-   * DELETE /upload/:folder/:filename — Delete a single file (admin only).
-   */
-  @Delete(':folder/:filename')
-  @HttpCode(HttpStatus.OK)
-  deleteFile(
-    @Param('folder') folder: string,
-    @Param('filename') filename: string,
-    @CurrentUser('sub') userId: string,
-  ) {
-    return this.uploadService.deleteFile(folder, filename, userId);
-  }
-
   // ═══════════════════════════════════════════════════════════════
   // HOMEPAGE — Public & Admin homepage content management
   // ═══════════════════════════════════════════════════════════════
@@ -404,5 +341,68 @@ export class UploadController {
     @Body() body: { folder: string; filename: string },
   ) {
     return this.uploadService.deleteHomepageImage(userId, body.folder, body.filename);
+  }
+
+  // ─── Parameterized routes AFTER static routes ───
+
+  /**
+   * DELETE /upload/folders/:name — Delete a custom folder + its files.
+   */
+  @Delete('folders/:name')
+  @HttpCode(HttpStatus.OK)
+  deleteFolder(@Param('name') name: string) {
+    return this.uploadService.deleteFolder(name);
+  }
+
+  /**
+   * GET /upload/list/:folder — List files in a folder (admin only).
+   */
+  @Get('list/:folder')
+  listFiles(
+    @Param('folder') folder: string,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.uploadService.listFiles(folder, userId);
+  }
+
+  /**
+   * POST /upload/:folder — Upload images to a folder (admin only).
+   */
+  @Post(':folder')
+  @UseInterceptors(
+    FilesInterceptor('files', 10, {
+      storage: multer.memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  @HttpCode(HttpStatus.OK)
+  async uploadAdminFiles(
+    @Param('folder') folder: string,
+    @UploadedFiles() files: Express.Multer.File[],
+    @CurrentUser('sub') userId: string,
+  ) {
+    const result = await this.uploadService.uploadFiles(folder, files, userId);
+    return {
+      statusCode: 200,
+      success: true,
+      message: `${result.uploaded.length} file(s) uploaded successfully to "${folder}"`,
+      data: {
+        uploaded: result.uploaded,
+        errors: result.errors,
+      },
+    };
+  }
+
+  /**
+   * DELETE /upload/:folder/:filename — Delete a single file (admin only).
+   */
+  @Delete(':folder/:filename')
+  @HttpCode(HttpStatus.OK)
+  deleteFile(
+    @Param('folder') folder: string,
+    @Param('filename') filename: string,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.uploadService.deleteFile(folder, filename, userId);
   }
 }

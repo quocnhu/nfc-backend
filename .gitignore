@@ -30,4 +30,7 @@ coverage
 
 # misc
 *.tsbuildinfo
-.vercel
+# vercel
+# .vercel/project.json is required by the GitHub Actions deploy workflow
+.vercel/*
+!.vercel/project.json

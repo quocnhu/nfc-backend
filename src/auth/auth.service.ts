@@ -16,9 +16,16 @@ import { UploadService } from '@/upload/upload.service';
 
 const REFRESH_TOKEN_EXPIRY_DAYS = 7;
 
+// Per-IP failed sign-in cap (in-memory). Prevents an attacker from locking
+// arbitrary accounts: after IP_FAILED_ATTEMPT_LIMIT failures within the window
+// the IP only gets generic errors and never touches an account's lockout.
+const IP_FAILED_ATTEMPT_LIMIT = 20;
+const IP_FAILED_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
+
 @Injectable()
 export class AuthService {
   private transporter: nodemailer.Transporter;
+  private readonly ipFailedAttempts = new Map<string, { count: number; windowEndsAt: number }>();
 
   constructor(
     private prisma: PrismaService,
@@ -201,7 +208,59 @@ export class AuthService {
     return responseOk('Verification email sent. Please check your inbox.');
   }
 
+  private ipKey(ip?: string): string | null {
+    if (!ip) return null;
+    // Handles both plain IPs and x-forwarded-for lists ("a, b, c").
+    return String(ip).split(',')[0].trim() || null;
+  }
+
+  private isIpRateLimited(ip?: string): boolean {
+    const key = this.ipKey(ip);
+    if (!key) return false;
+    const entry = this.ipFailedAttempts.get(key);
+    if (!entry) return false;
+    if (entry.windowEndsAt <= Date.now()) {
+      this.ipFailedAttempts.delete(key);
+      return false;
+    }
+    return entry.count >= IP_FAILED_ATTEMPT_LIMIT;
+  }
+
+  private registerIpFailedAttempt(ip?: string): void {
+    const key = this.ipKey(ip);
+    if (!key) return;
+    const now = Date.now();
+
+    // Keep the map from growing without bound
+    if (this.ipFailedAttempts.size > 1000) {
+      for (const [k, v] of this.ipFailedAttempts) {
+        if (v.windowEndsAt <= now) this.ipFailedAttempts.delete(k);
+      }
+    }
+
+    const entry = this.ipFailedAttempts.get(key);
+    if (!entry || entry.windowEndsAt <= now) {
+      this.ipFailedAttempts.set(key, {
+        count: 1,
+        windowEndsAt: now + IP_FAILED_ATTEMPT_WINDOW_MS,
+      });
+      return;
+    }
+    entry.count += 1;
+  }
+
+  private clearIpFailedAttempts(ip?: string): void {
+    const key = this.ipKey(ip);
+    if (key) this.ipFailedAttempts.delete(key);
+  }
+
   async signin(dto: SigninDto, ip?: string, userAgent?: string) {
+    // Per-IP guard runs first: a blocked IP only ever sees the generic error
+    // and can no longer drive any account towards its lockout.
+    if (this.isIpRateLimited(ip)) {
+      throw new ForbiddenException('Credentials incorrect');
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -277,6 +336,14 @@ export class AuthService {
   }
 
   private async recordLoginAttempt(email: string, success: boolean, reason: string | null, ip?: string, userAgent?: string) {
+    // Track failures per IP (and clear the counter on success) regardless of
+    // whether the DB write below succeeds.
+    if (success) {
+      this.clearIpFailedAttempts(ip);
+    } else {
+      this.registerIpFailedAttempt(ip);
+    }
+
     try {
       await this.prisma.loginAttempt.create({
         data: { email, success, reason, ip, userAgent },

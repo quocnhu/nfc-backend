@@ -11,6 +11,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { randomUUID } from 'node:crypto';
 import { TranslationService } from '@/translation/translation.service';
+import { LiveRateLimiter } from '@/translation/live-rate-limiter';
 
 interface Session {
   fromHint: string[];
@@ -63,14 +64,41 @@ export class TranslateGateway implements OnGatewayConnection, OnGatewayDisconnec
   @WebSocketServer()
   server!: Server;
 
-  constructor(private readonly translation: TranslationService) {}
+  constructor(
+    private readonly translation: TranslationService,
+    private readonly limiter: LiveRateLimiter,
+  ) {}
+
+  /**
+   * Best-effort client IP. Behind a proxy (Vercel, Render, nginx) the socket
+   * address is the proxy's, so the forwarded header is what identifies a real
+   * visitor. Falls back to the socket address when absent.
+   */
+  private ipOf(client: Socket): string {
+    const forwarded = client.handshake?.headers?.['x-forwarded-for'];
+    const raw = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+    const first = typeof raw === 'string' ? raw.split(',')[0]?.trim() : '';
+    return first || client.handshake?.address || 'unknown';
+  }
 
   handleConnection(client: Socket) {
+    // The socket is public by design, so the only thing standing between a
+    // stranger and the translation CPU is this admission check.
+    if (!this.limiter.admitSocket(this.ipOf(client))) {
+      client.emit('live:error', {
+        message: 'Too many open translator sessions from this network. Try again shortly.',
+      });
+      client.disconnect(true);
+      return;
+    }
+    client.data.ip = this.ipOf(client);
     this.logger.log(`Client connected: ${client.id}`);
   }
 
   handleDisconnect(client: Socket) {
     this.sessions.delete(client.id);
+    const ip = (client.data?.ip as string) || this.ipOf(client);
+    this.limiter.releaseSocket(ip);
     this.logger.log(`Client disconnected: ${client.id}`);
   }
 
@@ -100,6 +128,23 @@ export class TranslateGateway implements OnGatewayConnection, OnGatewayDisconnec
     const fromHint =
       payload?.from !== undefined ? toHints(payload.from) : session?.fromHint ?? [];
     const to = (payload?.to?.length ? payload.to : session?.to ?? []).filter(Boolean);
+
+    // Abuse checks come before the echo, so a rejected turn never reaches the
+    // UI as if it had been translated.
+    const ip = (client.data?.ip as string) || this.ipOf(client);
+    const invalid = this.limiter.validate(text, to);
+    if (invalid) {
+      client.emit('live:error', { message: invalid });
+      return;
+    }
+    const quota = this.limiter.consumeTurn(ip);
+    if (!quota.allowed) {
+      const seconds = Math.ceil(quota.retryAfterMs / 1000);
+      client.emit('live:error', {
+        message: `Translation rate limit reached. Try again in ${seconds}s.`,
+      });
+      return;
+    }
 
     const id = randomUUID();
     client.emit('live:final', { id, text });

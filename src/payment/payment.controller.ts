@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, HttpCode, HttpStatus, BadRequestException } from '@nestjs/common';
 import { PaymentService } from '@/payment/payment.service';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { Public } from '@/common/decorators/public.decorator';
@@ -42,7 +42,8 @@ export class PaymentController {
 
   @Get('public-status')
   @Public()
-  getPublicPaymentStatus(@Body() body: { userId: string }) {
-    return this.paymentService.getUserPaymentStatus(body.userId);
+  getPublicPaymentStatus(@Query('userId') userId: string) {
+    if (!userId) throw new BadRequestException('userId is required');
+    return this.paymentService.getUserPaymentStatus(userId);
   }
 }

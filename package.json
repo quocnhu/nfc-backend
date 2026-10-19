@@ -7,8 +7,15 @@
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
   },
+  "allowScripts": {
+    "@prisma/client": true,
+    "@prisma/engines": true,
+    "bcrypt": true,
+    "prisma": true,
+    "msedge-tts": false
+  },
   "scripts": {
-    "build": "nest build",
+    "build": "prisma generate && nest build",
     "format": "prettier --write \"src/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -39,7 +46,7 @@
     "class-validator": "^0.15.1",
     "cmu-pronouncing-dictionary": "^3.0.0",
     "cookie-parser": "^1.4.7",
-    "franc": "^6.2.0",
+    "franc": "^5.0.0",
     "kuroshiro": "^1.2.1",
     "kuroshiro-analyzer-kuromoji": "^1.1.0",
     "msedge-tts": "^2.0.7",

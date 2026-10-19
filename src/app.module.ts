@@ -18,6 +18,8 @@ import { RoleModule } from '@/role/role.module';
 import { PermissionModule } from '@/permission/permission.module';
 import { QRModule } from '@/qr/qr.module';
 import { TranslationModule } from '@/translation/translation.module';
+import { SharedBoxModule } from '@/shared-box/shared-box.module';
+import { RateLimitModule } from '@/common/rate-limit.module';
 import { PaymentModule } from '@/payment/payment.module';
 import { RequestMonitorModule } from '@/request-monitor/request-monitor.module';
 import { PermissionHelperModule } from '@/common/helpers/permission-helper.module';
@@ -62,7 +64,9 @@ import { PermissionSyncService } from '@/common/services/permission-sync.service
     RoleModule,         // Role CRUD with permission assignment
     PermissionModule,   // Permission CRUD
     QRModule,           // QR code generation
+    RateLimitModule, // Single shared per-IP limiter (global)
     TranslationModule,  // Google Translate + translation history
+    SharedBoxModule, // Learning boxes shared with anonymous visitors
     PaymentModule,      // PayPal payment processing
     RequestMonitorModule, // Request monitoring and analytics
   ],

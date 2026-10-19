@@ -7,7 +7,12 @@ async function main() {
   console.log("Seeding database...");
 
   const SALT_ROUNDS = 10;
-  const ADMIN_PASSWORD = "Admin@123";
+  const ADMIN_PASSWORD =
+    process.env.SEED_ADMIN_PASSWORD ||
+    (process.env.NODE_ENV !== "production" ? "Admin@123" : undefined);
+  if (!ADMIN_PASSWORD) {
+    throw new Error("SEED_ADMIN_PASSWORD must be set in production");
+  }
 
   // ── 1. Permissions ───────────────────────────────────────────────
   const permissionNames = [
@@ -59,6 +64,10 @@ async function main() {
     "create:subscription",
     "update:subscription",
     "delete:subscription",
+    "read:sharedbox",
+    "create:sharedbox",
+    "delete:sharedbox",
+    "*:sharedbox",
   ];
 
   const permissions: Record<string, { id: string }> = {};
@@ -75,9 +84,9 @@ async function main() {
   // ── 2. Roles ─────────────────────────────────────────────────────
   const roleSeeds = [
     { name: "ADMIN", permNames: permissionNames },
-    { name: "USER", permNames: ["create:user", "read:user", "update:user", "create:role", "read:role", "create:sharingcontent", "read:sharingcontent", "update:sharingcontent", "delete:sharingcontent", "read:history", "read:translation", "create:translation", "update:translation", "delete:translation", "read:dashboard", "create:avatar", "read:avatar", "delete:avatar", "read:upload", "create:upload", "delete:upload", "read:qr", "create:qr", "delete:qr"] },
-    { name: "VIP", permNames: ["create:user", "read:user", "update:user", "create:role", "read:role", "create:sharingcontent", "read:sharingcontent", "update:sharingcontent", "delete:sharingcontent", "read:history", "read:history:all", "read:translation", "create:translation", "update:translation", "delete:translation", "read:dashboard", "create:avatar", "read:avatar", "delete:avatar", "read:upload", "create:upload", "delete:upload", "read:qr", "create:qr", "delete:qr"] },
-    { name: "COMPANY", permNames: ["create:user", "read:user", "update:user", "create:role", "read:role", "create:sharingcontent", "read:sharingcontent", "update:sharingcontent", "delete:sharingcontent", "read:history", "read:history:all", "read:translation", "create:translation", "update:translation", "delete:translation", "read:dashboard", "create:avatar", "read:avatar", "delete:avatar", "read:upload", "create:upload", "delete:upload", "read:qr", "create:qr", "delete:qr", "delete:upload"] },
+    { name: "USER", permNames: ["create:user", "read:user", "update:user", "create:role", "read:role", "create:sharingcontent", "read:sharingcontent", "update:sharingcontent", "delete:sharingcontent", "read:history", "read:translation", "create:translation", "update:translation", "delete:translation", "read:dashboard", "create:avatar", "read:avatar", "delete:avatar", "read:upload", "create:upload", "delete:upload", "read:qr", "create:qr", "delete:qr", "read:sharedbox", "create:sharedbox", "delete:sharedbox", "*:sharedbox"] },
+    { name: "VIP", permNames: ["create:user", "read:user", "update:user", "create:role", "read:role", "create:sharingcontent", "read:sharingcontent", "update:sharingcontent", "delete:sharingcontent", "read:history", "read:history:all", "read:translation", "create:translation", "update:translation", "delete:translation", "read:dashboard", "create:avatar", "read:avatar", "delete:avatar", "read:upload", "create:upload", "delete:upload", "read:qr", "create:qr", "delete:qr", "read:sharedbox", "create:sharedbox", "delete:sharedbox", "*:sharedbox"] },
+    { name: "COMPANY", permNames: ["create:user", "read:user", "update:user", "create:role", "read:role", "create:sharingcontent", "read:sharingcontent", "update:sharingcontent", "delete:sharingcontent", "read:history", "read:history:all", "read:translation", "create:translation", "update:translation", "delete:translation", "read:dashboard", "create:avatar", "read:avatar", "delete:avatar", "read:upload", "create:upload", "delete:upload", "read:qr", "create:qr", "delete:qr", "delete:upload", "read:sharedbox", "create:sharedbox", "delete:sharedbox", "*:sharedbox"] },
     { name: "LOCAL", permNames: permissionNames },
   ];
 
