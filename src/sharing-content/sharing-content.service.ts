@@ -184,7 +184,6 @@ export class SharingContentService {
     });
 
     if (!user) throw new NotFoundException('User not found');
-    if (user.role?.name?.toUpperCase() === 'ADMIN') throw new NotFoundException('User not found');
 
     // VIP and COMPANY users bypass subscription checks
     const isVipOrCompany = user.role?.name?.toUpperCase() === 'VIP' || 
