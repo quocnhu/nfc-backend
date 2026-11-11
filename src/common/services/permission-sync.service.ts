@@ -117,6 +117,16 @@ export class PermissionSyncService implements OnModuleInit {
           
           // Derive permission
           const permission = derivePermission(metatype, method, fullPath);
+
+          // Self-service routes (/me, /public) bypass the permission guard, so
+          // they must not create permission rows in the database.
+          if (fullPath.includes('/me') || fullPath.includes('/public')) continue;
+
+          // Notification routes are self-service (/me) or explicitly guarded by
+          // an ADMIN check in the controller, so they must not create permission
+          // rows in the database.
+          if (permission.endsWith(':notification')) continue;
+
           permissions.add(permission);
         }
       }

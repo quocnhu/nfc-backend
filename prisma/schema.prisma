@@ -9,52 +9,56 @@ datasource db {
 }
 
 model User {
-  id                    String           @id @default(uuid())
-  email                 String           @unique
+  id                    String                  @id @default(uuid())
+  email                 String                  @unique
   fullname              String
   password              String
   avatarUrl             String?
-  isEmailVerified       Boolean          @default(false)
+  isEmailVerified       Boolean                 @default(false)
   roleId                String
   createdBy             String?
-  failedLoginCount      Int              @default(0)
+  failedLoginCount      Int                     @default(0)
   lockedUntil           DateTime?
-  status                UserStatus       @default(ACTIVE)
-  userType              UserType         @default(LOCAL)
-  tokenVersion          Int              @default(0)
+  status                UserStatus              @default(ACTIVE)
+  userType              UserType                @default(LOCAL)
+  tokenVersion          Int                     @default(0)
   expiresAt             DateTime?
   templateId            String?
-  createdAt             DateTime         @default(now())
-  updatedAt             DateTime         @updatedAt
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
   histories             History[]
   payments              Payment[]
-  createdPermissions    Permission[]     @relation("PermissionCreator")
+  createdPermissions    Permission[]            @relation("PermissionCreator")
   qrCodes               QRCode[]
   refreshTokens         RefreshToken[]
-  createdRoles          Role[]           @relation("RoleCreator")
-  createdSharingContent SharingContent[] @relation("SharingContentCreator")
+  createdRoles          Role[]                  @relation("RoleCreator")
+  createdSharingContent SharingContent[]        @relation("SharingContentCreator")
+  createdNotifications  Notification[]          @relation("NotificationCreator")
+  targetedNotifications Notification[]          @relation("NotificationTargetUser")
+  notifications         NotificationRecipient[]
   sharingContent        SharingContent[]
   subscriptions         Subscription[]
   translations          Translation[]
   sharedBoxes           SharedBox[]
-  creator               User?            @relation("UserCreator", fields: [createdBy], references: [id])
-  createdUsers          User[]           @relation("UserCreator")
-  role                  Role             @relation(fields: [roleId], references: [id])
-  template              Template?        @relation("UserSelectedTemplate", fields: [templateId], references: [id], onDelete: SetNull)
+  creator               User?                   @relation("UserCreator", fields: [createdBy], references: [id])
+  createdUsers          User[]                  @relation("UserCreator")
+  role                  Role                    @relation(fields: [roleId], references: [id])
+  template              Template?               @relation("UserSelectedTemplate", fields: [templateId], references: [id], onDelete: SetNull)
   userPermissions       UserPermission[]
 }
 
 model Role {
-  id          String         @id @default(uuid())
-  name        String         @unique
-  isActive    Boolean        @default(true)
-  createdBy   String?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  creator     User?          @relation("RoleCreator", fields: [createdBy], references: [id])
-  users       User[]
-  permissions Permission[]   @relation("PermissionToRole")
-  templates   RoleTemplate[]
+  id            String         @id @default(uuid())
+  name          String         @unique
+  isActive      Boolean        @default(true)
+  createdBy     String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  creator       User?          @relation("RoleCreator", fields: [createdBy], references: [id])
+  users         User[]
+  permissions   Permission[]   @relation("PermissionToRole")
+  templates     RoleTemplate[]
+  notifications Notification[]
 }
 
 model Template {
@@ -273,17 +277,17 @@ model RefreshToken {
 }
 
 model Translation {
-  id              String   @id @default(uuid())
-  userId          String
-  sourceText      String
-  translatedText  String
+  id             String   @id @default(uuid())
+  userId         String
+  sourceText     String
+  translatedText String
   /// Pronunciation guide for the translation (pinyin / romaji / respelling).
   /// Null for languages that need none, and for rows saved before this existed.
-  romanization    String?
-  sourceLang      String
-  targetLang      String
-  createdAt       DateTime @default(now())
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  romanization   String?
+  sourceLang     String
+  targetLang     String
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
 }
@@ -308,7 +312,7 @@ model SharedBox {
   updatedAt  DateTime @updatedAt
 
   sentences SharedSentence[]
-  owner     User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner     User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([ownerId, createdAt])
 }
@@ -316,15 +320,15 @@ model SharedBox {
 /// One line in a shared box. `isOwner` distinguishes the owner's own additions
 /// from a visitor's — a stranger's text is never attributed to the owner.
 model SharedSentence {
-  id             String   @id @default(uuid())
+  id             String    @id @default(uuid())
   boxId          String
   sourceText     String
   translatedText String
   romanization   String?
-  isOwner        Boolean  @default(false)
+  isOwner        Boolean   @default(false)
   /// IP of the writer, for abuse investigation only — never returned by the API.
   authorIp       String?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime  @default(now())
   box            SharedBox @relation(fields: [boxId], references: [id], onDelete: Cascade)
 
   @@index([boxId, createdAt])
@@ -347,6 +351,48 @@ model RequestLog {
   @@index([timestamp])
   @@index([path, timestamp])
   @@index([userId, timestamp])
+}
+
+model Notification {
+  id           String                  @id @default(uuid())
+  title        String
+  body         String
+  audienceType NotificationAudience    @default(ALL)
+  roleId       String?
+  userId       String?
+  sendEmail    Boolean                 @default(true)
+  skippedCount Int                     @default(0)
+  createdById  String?
+  createdAt    DateTime                @default(now())
+  role         Role?                   @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  targetUser   User?                   @relation("NotificationTargetUser", fields: [userId], references: [id], onDelete: SetNull)
+  createdBy    User?                   @relation("NotificationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  recipients   NotificationRecipient[]
+
+  @@index([createdAt])
+  @@index([userId])
+}
+
+model NotificationRecipient {
+  id             String       @id @default(uuid())
+  notificationId String
+  userId         String
+  readAt         DateTime?
+  emailSentAt    DateTime?
+  emailError     String?
+  createdAt      DateTime     @default(now())
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, userId])
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+}
+
+enum NotificationAudience {
+  ALL
+  ROLE
+  USER
 }
 
 enum UserType {

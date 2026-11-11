@@ -34,14 +34,17 @@ export class RolesGuard implements CanActivate {
     
     if (!user) return false;
 
-    if (this.isSelfServiceRoute(request.route?.path || '')) {
+    const routePath = request.route?.path || '';
+    const fullPath = request.path || request.url || '';
+
+    if (this.isSelfServiceRoute(routePath, fullPath)) {
       return true;
     }
 
     const requiredPermission = derivePermission(
       context.getClass(),
       request.method,
-      request.route?.path || '',
+      routePath,
     );
 
     const { mergedPermissions } = await this.permissionHelper.getUserPermissions(user.sub);
@@ -53,10 +56,21 @@ export class RolesGuard implements CanActivate {
     throw new ForbiddenException('Insufficient permissions');
   }
 
-  private isSelfServiceRoute(path: string): boolean {
+  private isSelfServiceRoute(path: string, fullPath = ''): boolean {
     const segments = path.split('/').filter(Boolean);
     if (segments.some((s) => s === 'me' || s === 'public')) return true;
     if (path.endsWith('/dashboard/permissions')) return true;
+    // Admin notification routes are guarded by an explicit ADMIN check in the
+    // controller; no notification permission rows exist in the database.
+    // request.route.path omits the controller prefix, so check the full URL too.
+    if (path.startsWith('/notifications/admin')) return true;
+    const fullSegments = fullPath.split('?')[0].split('/').filter(Boolean);
+    const start = fullSegments[0] === 'api' ? 1 : 0;
+    if (
+      fullSegments[start] === 'notifications' &&
+      fullSegments[start + 1] === 'admin'
+    )
+      return true;
     if (
       path.includes('/payment/create-order') ||
       path.includes('/payment/capture') ||

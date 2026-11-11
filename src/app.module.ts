@@ -11,6 +11,7 @@ import { RolesGuard } from '@/common/guards/roles.guard';
 import { SubscriptionGuard } from '@/common/guards/subscription.guard';
 import { SharingContentModule } from '@/sharing-content/sharing-content.module';
 import { TemplateModule } from '@/template/template.module';
+import { NotificationModule } from '@/notification/notification.module';
 import { HistoryModule } from '@/history/history.module';
 import { DashboardModule } from '@/dashboard/dashboard.module';
 import { UploadModule } from '@/upload/upload.module';
@@ -59,6 +60,7 @@ import { PermissionSyncService } from '@/common/services/permission-sync.service
     AuthModule,         // Authentication (signup, signin, logout, JWT, password reset)
     SharingContentModule, // Sharing content CRUD + public NFC endpoint
     TemplateModule,       // NFC profile template catalog + per-user selection
+    NotificationModule,   // Admin broadcasts + per-user bell notifications
     HistoryModule,      // Audit trail logging and retrieval
     DashboardModule,    // Dashboard stats, permissions breakdown, recent activity
     UploadModule,       // Avatar upload/download/delete via Supabase Storage
