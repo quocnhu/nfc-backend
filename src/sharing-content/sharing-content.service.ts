@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException, StreamableFile } fro
 import { PrismaService } from '@/database/prisma/prisma.service';
 import { SupabaseConfig } from '@/config/supabase.config';
 import { ConfigService } from '@nestjs/config';
+import { TemplateService } from '@/template/template.service';
 import { CreateSharingContentDto } from '@/sharing-content/dto/create-sharing-content.dto';
 import { UpdateSharingContentDto } from '@/sharing-content/dto/update-sharing-content.dto';
 import { responseOk, responseCreated } from '@/common/helpers/response.helper';
@@ -15,6 +16,7 @@ export class SharingContentService {
     private prisma: PrismaService,
     private supabaseConfig: SupabaseConfig,
     private config: ConfigService,
+    private templateService: TemplateService,
   ) {}
 
   private get supabase() {
@@ -163,6 +165,7 @@ export class SharingContentService {
         avatarUrl: true,
         status: true,
         expiresAt: true,
+        templateId: true,
         role: { select: { id: true, name: true } },
         subscriptions: {
           where: { isCurrent: true },
@@ -245,12 +248,29 @@ export class SharingContentService {
       return { ...item, iconUrl };
     });
 
+    const { selected: selectedTemplate } =
+      await this.templateService.resolveForRole(
+        user.role.id,
+        user.templateId,
+        user.role.name,
+      );
+
     const result = {
       id: user.id,
       fullname: user.fullname,
       email: user.email,
       avatarUrl: user.avatarUrl,
       role: user.role,
+      template: selectedTemplate
+        ? {
+            id: selectedTemplate.id,
+            slug: selectedTemplate.slug,
+            name: selectedTemplate.name,
+            category: selectedTemplate.category,
+            componentKey: selectedTemplate.componentKey,
+            thumbnailUrl: selectedTemplate.thumbnailUrl,
+          }
+        : null,
       subscription: currentSub ? {
         plan: currentSub.plan,
         status: currentSub.status,

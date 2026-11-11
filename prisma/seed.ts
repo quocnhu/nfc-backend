@@ -111,7 +111,106 @@ async function main() {
   }
   console.log(`  ✔ ${Object.keys(roles).length} roles synced (with permissions)`);
 
-  // ── 3. Plans ─────────────────────────────────────────────────────
+  // ── 3. Templates ─────────────────────────────────────────────────
+  // The catalog of NFC profile templates. `componentKey` maps to the React
+  // renderer on the frontend. Add new rows here as templates are created.
+  const templateSeeds = [
+    {
+      slug: "vip",
+      name: "VIP",
+      category: "General",
+      description: "Animated VIP profile card",
+      componentKey: "VipTemplate",
+      sortOrder: 1,
+    },
+    {
+      slug: "classic",
+      name: "Classic",
+      category: "General",
+      description: "Classic profile card",
+      componentKey: "UserTemplate",
+      sortOrder: 2,
+    },
+    {
+      slug: "real-estate",
+      name: "Real Estate",
+      category: "Real Estate",
+      description: "3D real estate advisor card",
+      componentKey: "RealEstateTemplate",
+      sortOrder: 3,
+    },
+    {
+      slug: "accounting",
+      name: "Accounting",
+      category: "Accounting",
+      description: "3D accounting & tax advisor card",
+      componentKey: "AccountingTemplate",
+      sortOrder: 4,
+    },
+    {
+      slug: "logistics",
+      name: "Logistics",
+      category: "Logistics",
+      description: "3D transport & logistics advisor card",
+      componentKey: "LogisticsTemplate",
+      sortOrder: 5,
+    },
+    {
+      slug: "it-devops",
+      name: "IT & Tourism",
+      category: "IT & Tourism",
+      description: "3D tour guide & IT DevOps card with mode switch",
+      componentKey: "ItDevopsTemplate",
+      sortOrder: 6,
+    },
+  ];
+
+  const templates: Record<string, { id: string }> = {};
+  for (const ts of templateSeeds) {
+    const t = await prisma.template.upsert({
+      where: { slug: ts.slug },
+      update: ts,
+      create: ts,
+    });
+    templates[ts.slug] = t;
+  }
+  console.log(`  ✔ ${templateSeeds.length} templates synced`);
+
+  // Which templates each role may use. VIP/COMPANY get the full catalog;
+  // a normal USER only gets the classic template.
+  const roleTemplateSeeds: Record<string, string[]> = {
+    ADMIN: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops"],
+    LOCAL: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops"],
+    VIP: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops"],
+    COMPANY: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops"],
+    USER: ["classic"],
+  };
+
+  // Default template selected for users of each role.
+  const roleDefaultTemplate: Record<string, string> = {
+    ADMIN: "real-estate",
+    LOCAL: "real-estate",
+    VIP: "real-estate",
+    COMPANY: "classic",
+    USER: "classic",
+  };
+
+  for (const [roleName, slugs] of Object.entries(roleTemplateSeeds)) {
+    const role = roles[roleName];
+    if (!role) continue;
+
+    const uniqueSlugs = [...new Set(slugs)];
+    await prisma.roleTemplate.deleteMany({ where: { roleId: role.id } });
+    await prisma.roleTemplate.createMany({
+      data: uniqueSlugs.map((slug) => ({
+        roleId: role.id,
+        templateId: templates[slug].id,
+      })),
+    });
+  }
+  console.log(`  ✔ role → template access synced`);
+
+  // ── 4. Plans ─────────────────────────────────────────────────────
   const planSeeds = [
     {
       name: "FREE",
@@ -191,7 +290,7 @@ async function main() {
   }
   console.log(`  ✔ ${planSeeds.length} plans synced`);
 
-  // ── 4. Admin User ────────────────────────────────────────────────
+  // ── 5. Admin User ────────────────────────────────────────────────
   const adminHashedPw = await bcrypt.hash(ADMIN_PASSWORD, SALT_ROUNDS);
   const adminEmail = "nquocnhu95it@gmail.com";
   await prisma.user.upsert({
@@ -216,7 +315,18 @@ async function main() {
   });
   console.log(`  ✔ ${adminEmail} user synced`);
 
-  // ── 5. Folders ───────────────────────────────────────────────────
+  // Give every existing user a sensible default template if they don't have one.
+  for (const [roleName, slug] of Object.entries(roleDefaultTemplate)) {
+    const role = roles[roleName];
+    if (!role) continue;
+    await prisma.user.updateMany({
+      where: { roleId: role.id, templateId: null },
+      data: { templateId: templates[slug].id },
+    });
+  }
+  console.log(`  ✔ default templates assigned to users`);
+
+  // ── 6. Folders ───────────────────────────────────────────────────
   const folderSeeds = [
     {
       name: "avatars",

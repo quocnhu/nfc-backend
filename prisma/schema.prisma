@@ -23,6 +23,7 @@ model User {
   userType              UserType         @default(LOCAL)
   tokenVersion          Int              @default(0)
   expiresAt             DateTime?
+  templateId            String?
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
   histories             History[]
@@ -39,19 +40,49 @@ model User {
   creator               User?            @relation("UserCreator", fields: [createdBy], references: [id])
   createdUsers          User[]           @relation("UserCreator")
   role                  Role             @relation(fields: [roleId], references: [id])
+  template              Template?        @relation("UserSelectedTemplate", fields: [templateId], references: [id], onDelete: SetNull)
   userPermissions       UserPermission[]
 }
 
 model Role {
-  id          String       @id @default(uuid())
-  name        String       @unique
-  isActive    Boolean      @default(true)
+  id          String         @id @default(uuid())
+  name        String         @unique
+  isActive    Boolean        @default(true)
   createdBy   String?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  creator     User?        @relation("RoleCreator", fields: [createdBy], references: [id])
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  creator     User?          @relation("RoleCreator", fields: [createdBy], references: [id])
   users       User[]
-  permissions Permission[] @relation("PermissionToRole")
+  permissions Permission[]   @relation("PermissionToRole")
+  templates   RoleTemplate[]
+}
+
+model Template {
+  id           String         @id @default(uuid())
+  slug         String         @unique
+  name         String
+  category     String?
+  description  String?
+  /// Frontend renderer key, e.g. "RealEstateTemplate", "VipTemplate".
+  componentKey String
+  thumbnailUrl String?
+  isActive     Boolean        @default(true)
+  sortOrder    Int            @default(0)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  roles        RoleTemplate[]
+  users        User[]         @relation("UserSelectedTemplate")
+}
+
+model RoleTemplate {
+  id         String   @id @default(uuid())
+  roleId     String
+  templateId String
+  createdAt  DateTime @default(now())
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  template   Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, templateId])
 }
 
 model Permission {
