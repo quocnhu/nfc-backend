@@ -10,8 +10,6 @@ import { Response } from 'express';
 
 const BUCKET_NAME = 'foldersupabase';
 
-const DEFAULT_BLOCKED_PUBLIC_PROFILE_IDS = ['371dccf1-1899-4efd-8c58-2dcacc267bb3'];
-
 @Injectable()
 export class SharingContentService {
   constructor(
@@ -30,7 +28,7 @@ export class SharingContentService {
       .split(',')
       .map((id) => id.trim())
       .filter(Boolean);
-    return new Set([...DEFAULT_BLOCKED_PUBLIC_PROFILE_IDS, ...configured]);
+    return new Set(configured);
   }
 
   private getPublicUrl(filePath: string): string {
