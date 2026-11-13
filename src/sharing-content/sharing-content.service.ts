@@ -10,6 +10,8 @@ import { Response } from 'express';
 
 const BUCKET_NAME = 'foldersupabase';
 
+const DEFAULT_BLOCKED_PUBLIC_PROFILE_IDS = ['371dccf1-1899-4efd-8c58-2dcacc267bb3'];
+
 @Injectable()
 export class SharingContentService {
   constructor(
@@ -21,6 +23,14 @@ export class SharingContentService {
 
   private get supabase() {
     return this.supabaseConfig.getClient();
+  }
+
+  private get blockedPublicProfileIds(): Set<string> {
+    const configured = (this.config.get<string>('BLOCKED_PUBLIC_PROFILE_IDS') || '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+    return new Set([...DEFAULT_BLOCKED_PUBLIC_PROFILE_IDS, ...configured]);
   }
 
   private getPublicUrl(filePath: string): string {
@@ -187,6 +197,13 @@ export class SharingContentService {
     });
 
     if (!user) throw new NotFoundException('User not found');
+
+    // Admin accounts (and explicitly blocked IDs) must never be reachable through
+    // the public/NFC link, even when someone supplies the correct userId.
+    const isAdmin = user.role?.name?.toUpperCase() === 'ADMIN';
+    if (isAdmin || this.blockedPublicProfileIds.has(user.id)) {
+      throw new NotFoundException('User not found');
+    }
 
     // VIP and COMPANY users bypass subscription checks
     const isVipOrCompany = user.role?.name?.toUpperCase() === 'VIP' || 

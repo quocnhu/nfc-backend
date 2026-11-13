@@ -55,6 +55,8 @@ export class UserService {
           status: true,
           userType: true,
           expiresAt: true,
+          createdAt: true,
+          updatedAt: true,
           subscriptions: {
             where: { isCurrent: true },
             take: 1,
