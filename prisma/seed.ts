@@ -187,6 +187,14 @@ async function main() {
       componentKey: "ItTemplate",
       sortOrder: 9,
     },
+    {
+      slug: "tour-guide-1",
+      name: "Tour Guide 1",
+      category: "Tourism",
+      description: "3D tour guide card with Vietnam map and famous landmarks",
+      componentKey: "Tourguide1Template",
+      sortOrder: 10,
+    },
   ];
 
   const templates: Record<string, { id: string }> = {};
@@ -203,10 +211,10 @@ async function main() {
   // Which templates each role may use. VIP/COMPANY get the full catalog;
   // a normal USER only gets the classic template.
   const roleTemplateSeeds: Record<string, string[]> = {
-    ADMIN: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer"],
-    LOCAL: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer"],
-    VIP: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer"],
-    COMPANY: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer"],
+    ADMIN: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer", "tour-guide-1"],
+    LOCAL: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer", "tour-guide-1"],
+    VIP: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer", "tour-guide-1"],
+    COMPANY: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer", "tour-guide-1"],
     USER: ["classic"],
   };
 
