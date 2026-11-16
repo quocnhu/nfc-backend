@@ -195,6 +195,22 @@ async function main() {
       componentKey: "Tourguide1Template",
       sortOrder: 10,
     },
+    {
+      slug: "tour-guide-2",
+      name: "Tour Guide 2",
+      category: "Tourism",
+      description: "3D tour guide card with Vietnam journey (guide-only, no IT DevOps mode)",
+      componentKey: "Tourguide2Template",
+      sortOrder: 11,
+    },
+    {
+      slug: "driver",
+      name: "Driver",
+      category: "Service",
+      description: "3D driver card with car scene, contact icons, and sharing items",
+      componentKey: "DriverTemplate",
+      sortOrder: 12,
+    },
   ];
 
   const templates: Record<string, { id: string }> = {};
@@ -211,10 +227,10 @@ async function main() {
   // Which templates each role may use. VIP/COMPANY get the full catalog;
   // a normal USER only gets the classic template.
   const roleTemplateSeeds: Record<string, string[]> = {
-    ADMIN: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer", "tour-guide-1"],
-    LOCAL: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer", "tour-guide-1"],
-    VIP: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer", "tour-guide-1"],
-    COMPANY: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer", "tour-guide-1"],
+    ADMIN: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer", "tour-guide-1", "tour-guide-2", "driver"],
+    LOCAL: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer", "tour-guide-1", "tour-guide-2", "driver"],
+    VIP: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer", "tour-guide-1", "tour-guide-2", "driver"],
+    COMPANY: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer", "tour-guide-1", "tour-guide-2", "driver"],
     USER: ["classic"],
   };
 

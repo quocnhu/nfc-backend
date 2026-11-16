@@ -4,15 +4,19 @@ import { SelectTemplateDto } from '@/template/dto/select-template.dto';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 
 /**
- * TemplateController — self-service template selection for the logged-in user.
- *
- * Routes live under /templates/me so the global RolesGuard treats them as
- * self-service (no explicit permission needed). Role → template access is
- * enforced inside the service.
+ * TemplateController — template catalog and self-service selection.
  */
 @Controller('templates')
 export class TemplateController {
   constructor(private templateService: TemplateService) {}
+
+  /**
+   * GET /templates — all active templates (for admin role-template assignment).
+   */
+  @Get()
+  findAll() {
+    return this.templateService.findAll();
+  }
 
   /**
    * GET /templates/me — templates available to the current user's role and

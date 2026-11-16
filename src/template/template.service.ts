@@ -106,4 +106,15 @@ export class TemplateService {
 
     return responseOk('Template selected successfully', template);
   }
+
+  /**
+   * GET /templates — list all active templates (catalog) for admin assignment UIs.
+   */
+  async findAll() {
+    const templates = await this.prisma.template.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    });
+    return responseOk('Templates fetched successfully', templates);
+  }
 }

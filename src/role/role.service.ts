@@ -17,7 +17,23 @@ export class RoleService {
       include: {
         permissions: { select: { id: true, name: true } },
         creator: { select: { id: true, fullname: true, email: true } },
+        templates: {
+          include: {
+            template: {
+              select: {
+                id: true,
+                slug: true,
+                name: true,
+                category: true,
+                componentKey: true,
+                isActive: true,
+                sortOrder: true,
+              },
+            },
+          },
+        },
       },
+      orderBy: { name: 'asc' },
     });
     return responseOk('Roles fetched successfully', roles);
   }
@@ -51,20 +67,22 @@ export class RoleService {
   }
 
   /**
-   * update — Update a role's name and/or assigned permissions.
+   * update — Update a role's name and/or assigned permissions/templates.
    * 1. Find role → 404 if not found.
-   * 2. Block modification of the ADMIN role → 403.
+   * 2. Block name/permission modification of the ADMIN role → 403 (template assignment allowed).
    * 3. Check name uniqueness if changing → 409 if conflict.
    * 4. Update the role name.
    * 5. If permissionIds provided, replace all permissions (full-replace via `set`).
-   * 6. Re-fetch the role with permissions and return.
+   * 6. If templateIds provided, replace all role templates (full-replace).
+   * 7. Re-fetch the role with permissions/templates and return.
    */
   async update(id: string, dto: UpdateRoleDto) {
     const role = await this.prisma.role.findUnique({ where: { id } });
     if (!role) throw new NotFoundException('Role not found');
 
-    if (role.name.toUpperCase() === 'ADMIN') {
-      throw new ForbiddenException('ADMIN role cannot be modified');
+    const isAdminRole = role.name.toUpperCase() === 'ADMIN';
+    if (isAdminRole && (dto.name || dto.permissionIds)) {
+      throw new ForbiddenException('ADMIN role name/permissions cannot be modified');
     }
 
     const normalizedName = dto.name?.toUpperCase();
@@ -76,10 +94,10 @@ export class RoleService {
       if (nameTaken) throw new ConflictException('Role name already exists');
     }
 
-    const updated = await this.prisma.role.update({
+    await this.prisma.role.update({
       where: { id },
       data: {
-        name: normalizedName,
+        ...(normalizedName ? { name: normalizedName } : {}),
       },
     });
 
@@ -94,10 +112,36 @@ export class RoleService {
       });
     }
 
-    // Step 6: Re-fetch with permissions included
+    if (dto.templateIds) {
+      await this.prisma.roleTemplate.deleteMany({ where: { roleId: id } });
+      if (dto.templateIds.length) {
+        await this.prisma.roleTemplate.createMany({
+          data: dto.templateIds.map((templateId) => ({ roleId: id, templateId })),
+          skipDuplicates: true,
+        });
+      }
+    }
+
     const result = await this.prisma.role.findUnique({
       where: { id },
-      include: { permissions: { select: { id: true, name: true } } },
+      include: {
+        permissions: { select: { id: true, name: true } },
+        templates: {
+          include: {
+            template: {
+              select: {
+                id: true,
+                slug: true,
+                name: true,
+                category: true,
+                componentKey: true,
+                isActive: true,
+                sortOrder: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     return responseOk('Role updated successfully', result);

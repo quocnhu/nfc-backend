@@ -17,6 +17,7 @@ export class CreateRoleDto {
  * - id: Required UUID of the role to update.
  * - name: Optional new name (2-50 chars).
  * - permissionIds: Optional array of permission UUIDs (replaces all role permissions).
+ * - templateIds: Optional array of template UUIDs (replaces all role templates).
  */
 export class UpdateRoleDto {
   @IsUUID()
@@ -31,6 +32,10 @@ export class UpdateRoleDto {
   @IsOptional()
   @IsUUID('4', { each: true })
   permissionIds?: string[];
+
+  @IsOptional()
+  @IsUUID('4', { each: true })
+  templateIds?: string[];
 }
 
 /**
