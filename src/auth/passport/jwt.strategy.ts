@@ -1,45 +1,55 @@
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '@/database/prisma/prisma.service';
 
 /**
  * JwtStrategy — Passport strategy for validating JWTs from httpOnly cookies.
  *
- * This is used by JwtAuthGuard. The flow:
- *   1. JwtAuthGuard delegates to Passport's JWT strategy.
- *   2. Passport extracts the JWT from the "jwt" httpOnly cookie.
- *   3. Passport verifies the token signature and expiration.
- *   4. The validate() method is called with the decoded payload.
- *   5. The return value is attached to request.user.
- *
- * The JWT payload contains: { sub: userId, email, iat, exp }
- * The validate() method extracts only the fields we need.
+ * The token signature/expiry are verified by Passport; validate() then checks
+ * the user still exists, is active, and that the token's tokenVersion matches
+ * the database. This makes deactivation, deletion, and forced logout take
+ * effect immediately instead of waiting for the 15-minute access token to
+ * expire.
  */
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private prisma: PrismaService,
+  ) {
     super({
-      // Extract JWT from the "jwt" httpOnly cookie (not from Authorization header)
       jwtFromRequest: ExtractJwt.fromExtractors([
         (request) => request?.cookies?.['jwt']
       ]),
-      // Reject expired tokens
       ignoreExpiration: false,
-      // Secret key for verifying the token signature
       secretOrKey: configService.get<string>('JWT_SECRET')!,
     });
   }
 
-  /**
-   * validate — Called after JWT is verified successfully.
-   * @param payload — The decoded JWT payload: { sub: userId, email, iat, exp }
-   * @returns Object that gets attached to request.user
-   *
-   * The return value { sub, email } is what @CurrentUser() decorator accesses.
-   * This is also what RolesGuard reads from request.user to check permissions.
-   */
   async validate(payload: any) {
-    return { sub: payload.sub, email: payload.email };
+    if (!payload?.sub) {
+      throw new UnauthorizedException('Invalid token');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { id: true, email: true, status: true, tokenVersion: true },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User no longer exists');
+    }
+
+    if (user.status !== 'ACTIVE') {
+      throw new UnauthorizedException('Account is not active');
+    }
+
+    if ((payload.tokenVersion ?? 0) !== user.tokenVersion) {
+      throw new UnauthorizedException('Token has been revoked');
+    }
+
+    return { sub: user.id, email: user.email };
   }
 }

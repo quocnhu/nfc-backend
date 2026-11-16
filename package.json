@@ -7,6 +7,10 @@
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
   },
+  "overrides": {
+    "trim": "0.0.3",
+    "deepmerge-ts": "8.0.2"
+  },
   "allowScripts": {
     "@prisma/client": true,
     "@prisma/engines": true,
@@ -47,11 +51,12 @@
     "cmu-pronouncing-dictionary": "^3.0.0",
     "cookie-parser": "^1.4.7",
     "franc": "^5.0.0",
+    "helmet": "^8.3.0",
     "kuroshiro": "^1.2.1",
     "kuroshiro-analyzer-kuromoji": "^1.1.0",
     "msedge-tts": "^2.0.7",
     "multer": "^2.2.0",
-    "nodemailer": "^9.0.3",
+    "nodemailer": "^10.5.0",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "passport-jwt": "^4.0.1",

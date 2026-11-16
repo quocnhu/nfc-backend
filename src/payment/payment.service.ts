@@ -272,13 +272,22 @@ export class PaymentService {
     });
   }
 
-  async captureOrder(orderId: string, payerId?: string) {
+  async captureOrder(userId: string, orderId: string, payerId?: string) {
     const payment = await this.prisma.payment.findUnique({
       where: { paypalOrderId: orderId },
       include: { user: true, plan: true },
     });
 
     if (!payment) throw new NotFoundException('Payment not found');
+
+    const caller = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: { select: { name: true } } },
+    });
+    const isAdmin = caller?.role?.name?.toUpperCase() === 'ADMIN';
+    if (payment.userId !== userId && !isAdmin) {
+      throw new ForbiddenException('You cannot capture this payment');
+    }
 
     if (payment.status === 'COMPLETED') {
       return responseOk('Payment already completed', payment);

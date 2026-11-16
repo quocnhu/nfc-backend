@@ -57,6 +57,62 @@ export class AuthService {
     await this.prisma.refreshToken.deleteMany({ where: { token } });
   }
 
+  /**
+   * createOAuthCode — Issue a short-lived, single-use code for the Google
+   * redirect flow. Stored in the RefreshToken table so it survives across
+   * serverless instances; it is deleted on first exchange.
+   */
+  async createOAuthCode(userId: string): Promise<string> {
+    const code = crypto.randomBytes(32).toString('hex');
+    await this.prisma.refreshToken.create({
+      data: { token: code, userId, expiresAt: new Date(Date.now() + 60 * 1000) },
+    });
+    return code;
+  }
+
+  /**
+   * exchangeOAuthCode — Redeem a one-time OAuth code for real tokens.
+   * The code is deleted before returning, so it cannot be replayed.
+   */
+  async exchangeOAuthCode(code: string) {
+    if (!code) {
+      throw new UnauthorizedException('Code required');
+    }
+
+    const record = await this.prisma.refreshToken.findUnique({
+      where: { token: code },
+      include: { user: true },
+    });
+
+    if (!record || new Date() > record.expiresAt) {
+      if (record) await this.deleteRefreshToken(code);
+      throw new UnauthorizedException('Invalid or expired code');
+    }
+
+    await this.deleteRefreshToken(code);
+
+    if (record.user.status !== 'ACTIVE') {
+      throw new ForbiddenException('Account is not active');
+    }
+
+    const accessToken = await this.signToken(
+      record.user.id,
+      record.user.email,
+      record.user.tokenVersion,
+    );
+    const refreshToken = await this.generateRefreshToken(record.user.id);
+
+    return {
+      statusCode: 200,
+      success: true,
+      message: 'Code exchanged successfully',
+      data: {
+        access_token: accessToken.access_token,
+        refresh_token: refreshToken,
+      },
+    };
+  }
+
   async signup(dto: SignupDto) {
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -319,7 +375,7 @@ export class AuthService {
 
     await this.recordLoginAttempt(dto.email, true, null, ip, userAgent);
 
-    const accessToken = await this.signToken(user.id, user.email);
+    const accessToken = await this.signToken(user.id, user.email, user.tokenVersion);
     const refreshToken = await this.generateRefreshToken(user.id);
 
     return {
@@ -401,9 +457,18 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token expired');
     }
 
+    if (record.user.status !== 'ACTIVE') {
+      await this.deleteRefreshToken(refreshToken);
+      throw new ForbiddenException('Account is not active');
+    }
+
     await this.deleteRefreshToken(refreshToken);
 
-    const newAccessToken = await this.signToken(record.userId, record.user.email);
+    const newAccessToken = await this.signToken(
+      record.userId,
+      record.user.email,
+      record.user.tokenVersion,
+    );
     const newRefreshToken = await this.generateRefreshToken(record.userId);
 
     return {
@@ -532,7 +597,11 @@ export class AuthService {
         },
       });
 
-      const accessToken = await this.signToken(updatedUser.id, updatedUser.email);
+      const accessToken = await this.signToken(
+        updatedUser.id,
+        updatedUser.email,
+        updatedUser.tokenVersion,
+      );
       const refreshToken = await this.generateRefreshToken(updatedUser.id);
       const userData = await this.prisma.user.findUnique({
         where: { id: updatedUser.id },
@@ -549,6 +618,7 @@ export class AuthService {
         data: {
           access_token: accessToken.access_token,
           refresh_token: refreshToken,
+          userId: updatedUser.id,
           user: userData,
           status: updatedUser.status,
           expiresAt: updatedUser.expiresAt,
@@ -595,7 +665,11 @@ export class AuthService {
       });
     }
 
-    const accessToken = await this.signToken(newUser.id, newUser.email);
+    const accessToken = await this.signToken(
+      newUser.id,
+      newUser.email,
+      newUser.tokenVersion,
+    );
     const refreshToken = await this.generateRefreshToken(newUser.id);
 
     return {
@@ -605,6 +679,7 @@ export class AuthService {
       data: {
         access_token: accessToken.access_token,
         refresh_token: refreshToken,
+        userId: newUser.id,
         status: newUser.status,
         expiresAt: newUser.expiresAt,
       },
@@ -613,12 +688,16 @@ export class AuthService {
 
   /**
    * signToken — Generate a JWT access token.
-   * Payload contains: { sub: userId, email }.
+   * Payload contains: { sub: userId, email, tokenVersion }.
    * Token expires in 15 minutes.
    * Signed with the JWT_SECRET from environment variables.
    */
-  async signToken(userId: string, email: string): Promise<{ access_token: string }> {
-    const payload = { sub: userId, email };
+  async signToken(
+    userId: string,
+    email: string,
+    tokenVersion = 0,
+  ): Promise<{ access_token: string }> {
+    const payload = { sub: userId, email, tokenVersion };
     const secret = this.config.get('JWT_SECRET');
 
     const token = await this.jwt.signAsync(payload, {

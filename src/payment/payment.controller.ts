@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Query, HttpCode, HttpStatus, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { PaymentService } from '@/payment/payment.service';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { Public } from '@/common/decorators/public.decorator';
@@ -21,8 +21,11 @@ export class PaymentController {
 
   @Post('capture')
   @HttpCode(HttpStatus.OK)
-  captureOrder(@Body() body: { orderId: string; payerId?: string }) {
-    return this.paymentService.captureOrder(body.orderId, body.payerId);
+  captureOrder(
+    @CurrentUser('sub') userId: string,
+    @Body() body: { orderId: string; payerId?: string },
+  ) {
+    return this.paymentService.captureOrder(userId, body.orderId, body.payerId);
   }
 
   @Get('my-payments')
@@ -37,13 +40,6 @@ export class PaymentController {
 
   @Get('status')
   getUserPaymentStatus(@CurrentUser('sub') userId: string) {
-    return this.paymentService.getUserPaymentStatus(userId);
-  }
-
-  @Get('public-status')
-  @Public()
-  getPublicPaymentStatus(@Query('userId') userId: string) {
-    if (!userId) throw new BadRequestException('userId is required');
     return this.paymentService.getUserPaymentStatus(userId);
   }
 }

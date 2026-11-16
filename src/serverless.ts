@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { corsOptions } from './config/cors';
 import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
 
 let cachedApp: any;
 
@@ -12,6 +13,12 @@ export async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api');
   app.use(cookieParser());
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
   // Shared options with main.ts — see src/config/cors.ts
   app.enableCors(corsOptions);
   app.useGlobalPipes(

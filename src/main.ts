@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from '@/app.module';
 import { corsOptions } from '@/config/cors';
 import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
 
 /**
  * bootstrap — Start the NestJS application.
@@ -21,6 +22,15 @@ async function bootstrap() {
 
   // Step 2: Parse cookies from incoming requests (needed for JWT cookie)
   app.use(cookieParser());
+
+  // Step 2b: Security headers. CSP is disabled because this is a JSON API and
+  // resources (images) are intentionally fetched cross-origin by the frontend.
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
 
   // Step 3: Enable CORS — credentials: true allows httpOnly cookies in cross-origin requests
   // (shared options with serverless.ts — see src/config/cors.ts)

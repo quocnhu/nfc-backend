@@ -72,7 +72,7 @@ export class UploadController {
   @UseInterceptors(
     FilesInterceptor('files', 20, {
       storage: multer.memoryStorage(),
-      limits: { fileSize: 1024 * 1024 * 1024 },
+      limits: { fileSize: 20 * 1024 * 1024 },
     }),
   )
   @HttpCode(HttpStatus.OK)
@@ -125,10 +125,11 @@ export class UploadController {
     @Query('path') filePath: string,
     @Res() res: Response,
   ) {
-    const { stream, contentType, filename } = await this.uploadService.streamFile(userId, filePath);
+    const { stream, contentType, filename, disposition } = await this.uploadService.streamFile(userId, filePath);
     res.set({
       'Content-Type': contentType,
-      'Content-Disposition': `inline; filename="${filename}"`,
+      'Content-Disposition': `${disposition}; filename="${filename}"`,
+      'X-Content-Type-Options': 'nosniff',
       'Cache-Control': 'private, max-age=3600',
     });
     stream.pipe(res);

@@ -154,11 +154,12 @@ export class SharingContentService {
     const ext = filePath.split('.').pop()?.toLowerCase() || '';
     const mimeMap: Record<string, string> = {
       jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
-      webp: 'image/webp', svg: 'image/svg+xml',
+      webp: 'image/webp',
     };
     const contentType = mimeMap[ext] || 'application/octet-stream';
 
     res.setHeader('Content-Type', contentType);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Cache-Control', 'public, max-age=31536000');
     res.send(buffer);
   }

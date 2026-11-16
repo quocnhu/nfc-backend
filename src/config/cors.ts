@@ -21,7 +21,14 @@ export function resolveCorsOrigins(): string[] {
 export const corsOptions: CorsOptions = {
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-    if (origin.startsWith('http://localhost:')) return callback(null, true);
+    // Localhost is only trusted outside production. Allowing it in production
+    // would let any local process make credentialed requests to the API.
+    if (
+      process.env.NODE_ENV !== 'production' &&
+      (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:'))
+    ) {
+      return callback(null, true);
+    }
     const allowed = resolveCorsOrigins();
     if (allowed.some((a) => origin === a)) return callback(null, true);
     callback(new Error('Not allowed by CORS'));

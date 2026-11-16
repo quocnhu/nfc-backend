@@ -130,7 +130,7 @@ export class UploadService {
    * streamFile — Download a file from Supabase and return stream + metadata.
    * Used by the proxy endpoint.
    */
-  async streamFile(userId: string, filePath: string): Promise<{ stream: Readable; contentType: string; filename: string }> {
+  async streamFile(userId: string, filePath: string): Promise<{ stream: Readable; contentType: string; filename: string; disposition: 'inline' | 'attachment' }> {
     this.validateUserFileAccess(userId, filePath);
 
     // Extract user folder from path and verify ownership
@@ -160,17 +160,22 @@ export class UploadService {
     const buffer = Buffer.from(await data.arrayBuffer());
     const stream = Readable.from(buffer);
 
-    // Determine content type from file extension
+    // Only raster images may be rendered inline. Anything else (SVG, HTML,
+    // PDF, unknown) is served as a download so it can never execute scripts
+    // on this origin.
     const ext = filePath.split('.').pop()?.toLowerCase() || '';
-    const mimeMap: Record<string, string> = {
-      jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
-      gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
-      pdf: 'application/pdf', txt: 'text/plain',
+    const inlineTypes: Record<string, string> = {
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      gif: 'image/gif',
+      webp: 'image/webp',
     };
-    const contentType = mimeMap[ext] || 'application/octet-stream';
+    const contentType = inlineTypes[ext] || 'application/octet-stream';
+    const disposition = inlineTypes[ext] ? 'inline' : 'attachment';
     const filename = filePath.split('/').pop() || 'file';
 
-    return { stream, contentType, filename };
+    return { stream, contentType, filename, disposition };
   }
 
   /**
@@ -541,19 +546,33 @@ export class UploadService {
         continue;
       }
 
+      if (!ALLOWED_MIMES.includes(file.mimetype)) {
+        errors.push(`"${file.originalname}": invalid type (only JPEG, PNG)`);
+        continue;
+      }
+
       try {
-        // Store original file as-is (no processing)
-        const ext = file.originalname.split('.').pop() || 'bin';
+        // Re-encode every upload to JPEG. This strips scripts, EXIF and any
+        // disguised non-image payload before the bytes reach storage, and it
+        // guarantees we never serve user-controlled SVG/HTML.
+        let processed: Buffer;
+        try {
+          processed = await this.processImage(file.buffer, USERDATA_MAX_DIMENSION);
+        } catch {
+          errors.push(`"${file.originalname}": not a valid image`);
+          continue;
+        }
+
         const timestamp = Date.now();
         const baseName = file.originalname
           .replace(/\.[^.]+$/, '')
           .replace(/[^a-zA-Z0-9_-]/g, '_');
-        const filePath = `${basePath}/${baseName}_${timestamp}.${ext}`;
+        const filePath = `${basePath}/${baseName}_${timestamp}.jpg`;
 
         const { error } = await this.supabase.storage
           .from(BUCKET_NAME)
-          .upload(filePath, file.buffer, {
-            contentType: file.mimetype,
+          .upload(filePath, processed, {
+            contentType: 'image/jpeg',
             upsert: false,
           });
 
@@ -1318,9 +1337,9 @@ export class UploadService {
     const ext = filePath.split('.').pop()?.toLowerCase() || '';
     const mimeMap: Record<string, string> = {
       jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
-      gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
+      gif: 'image/gif', webp: 'image/webp',
     };
-    const contentType = mimeMap[ext] || 'image/jpeg';
+    const contentType = mimeMap[ext] || 'application/octet-stream';
     const filename = filePath.split('/').pop() || 'file';
 
     return { stream, contentType, filename };
@@ -1344,22 +1363,32 @@ export class UploadService {
       throw new BadRequestException('No file uploaded');
     }
 
+    if (!ALLOWED_MIMES.includes(file.mimetype)) {
+      throw new BadRequestException('Invalid file type (only JPEG, PNG)');
+    }
+
+    let processed: Buffer;
+    try {
+      processed = await this.processImage(file.buffer, 1920);
+    } catch {
+      throw new BadRequestException('Not a valid image');
+    }
+
     await this.setupHomepageFolders(userId);
 
     const userFolder = await this.getUserFolder(userId);
     const folderPath = `userdata/${userFolder}/${this.HOMEPAGE_FOLDER_BASE}/${folder}`;
 
-    const ext = file.originalname.split('.').pop() || 'jpg';
     const timestamp = Date.now();
     const baseName = file.originalname
       .replace(/\.[^.]+$/, '')
       .replace(/[^a-zA-Z0-9_-]/g, '_');
-    const filePath = `${folderPath}/${baseName}_${timestamp}.${ext}`;
+    const filePath = `${folderPath}/${baseName}_${timestamp}.jpg`;
 
     const { error } = await this.supabase.storage
       .from(BUCKET_NAME)
-      .upload(filePath, file.buffer, {
-        contentType: file.mimetype,
+      .upload(filePath, processed, {
+        contentType: 'image/jpeg',
         upsert: false,
       });
 

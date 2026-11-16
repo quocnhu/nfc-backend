@@ -11,14 +11,28 @@ export class DashboardService {
   ) {}
 
   async getStats() {
-    const [totalUsers, totalRoles, totalPermissions, totalSharingContent, totalHistories] =
-      await Promise.all([
-        this.prisma.user.count(),
-        this.prisma.role.count(),
-        this.prisma.permission.count(),
-        this.prisma.sharingContent.count(),
-        this.prisma.history.count(),
-      ]);
+    const [
+      totalUsers,
+      totalRoles,
+      totalPermissions,
+      totalSharingContent,
+      totalHistories,
+      localUsers,
+      googleUsers,
+      usersByRole,
+    ] = await Promise.all([
+      this.prisma.user.count(),
+      this.prisma.role.count(),
+      this.prisma.permission.count(),
+      this.prisma.sharingContent.count(),
+      this.prisma.history.count(),
+      this.prisma.user.count({ where: { userType: 'LOCAL' } }),
+      this.prisma.user.count({ where: { userType: 'GOOGLE' } }),
+      this.prisma.role.findMany({
+        select: { name: true, _count: { select: { users: true } } },
+        orderBy: { name: 'asc' },
+      }),
+    ]);
 
     return responseOk('Dashboard stats fetched successfully', {
       totalUsers,
@@ -26,6 +40,14 @@ export class DashboardService {
       totalPermissions,
       totalSharingContent,
       totalHistories,
+      userTypeStats: {
+        LOCAL: localUsers,
+        GOOGLE: googleUsers,
+      },
+      usersByRole: usersByRole.map((role) => ({
+        role: role.name,
+        count: role._count.users,
+      })),
     });
   }
 
