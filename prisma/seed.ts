@@ -191,17 +191,9 @@ async function main() {
       slug: "tour-guide-1",
       name: "Tour Guide 1",
       category: "Tourism",
-      description: "3D tour guide card with Vietnam map and famous landmarks",
+      description: "walk along Vietnam",
       componentKey: "Tourguide1Template",
       sortOrder: 10,
-    },
-    {
-      slug: "tour-guide-2",
-      name: "Tour Guide 2",
-      category: "Tourism",
-      description: "3D tour guide card with Vietnam journey (guide-only, no IT DevOps mode)",
-      componentKey: "Tourguide2Template",
-      sortOrder: 11,
     },
     {
       slug: "driver",
@@ -209,7 +201,7 @@ async function main() {
       category: "Service",
       description: "3D driver card with car scene, contact icons, and sharing items",
       componentKey: "DriverTemplate",
-      sortOrder: 12,
+      sortOrder: 11,
     },
   ];
 
@@ -224,13 +216,21 @@ async function main() {
   }
   console.log(`  ✔ ${templateSeeds.length} templates synced`);
 
+  // Remove templates that were retired in this catalog revision.
+  const retiredTemplates = await prisma.template.deleteMany({
+    where: { slug: { in: ["tour-guide-2"] } },
+  });
+  if (retiredTemplates.count > 0) {
+    console.log(`  ✔ ${retiredTemplates.count} retired templates removed`);
+  }
+
   // Which templates each role may use. VIP/COMPANY get the full catalog;
   // a normal USER only gets the classic template.
   const roleTemplateSeeds: Record<string, string[]> = {
-    ADMIN: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer", "tour-guide-1", "tour-guide-2", "driver"],
-    LOCAL: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer", "tour-guide-1", "tour-guide-2", "driver"],
-    VIP: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer", "tour-guide-1", "tour-guide-2", "driver"],
-    COMPANY: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer", "tour-guide-1", "tour-guide-2", "driver"],
+    ADMIN: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer", "tour-guide-1", "driver"],
+    LOCAL: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer", "tour-guide-1", "driver"],
+    VIP: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer", "tour-guide-1", "driver"],
+    COMPANY: ["vip", "classic", "real-estate", "accounting", "logistics", "it-devops", "speaker", "tour-guide", "it-devops-engineer", "tour-guide-1", "driver"],
     USER: ["classic"],
   };
 
