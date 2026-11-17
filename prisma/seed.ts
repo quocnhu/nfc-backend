@@ -160,7 +160,7 @@ async function main() {
       name: "IT & Tourism",
       category: "IT & Tourism",
       description: "3D tour guide & IT DevOps card with mode switch",
-      componentKey: "ItDevopsTemplate",
+      componentKey: "ITDevopTourismTemplate",
       sortOrder: 6,
     },
     {
